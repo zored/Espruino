@@ -194,8 +194,9 @@ typedef int64_t JsSysTime;
 /// Put before functions that we always want inlined
 #if defined(LINK_TIME_OPTIMISATION) && !defined(SAVE_ON_FLASH) && !defined(DEBUG)
 #define ALWAYS_INLINE inline __attribute__((always_inline))
-#elif defined(__GNUC__)
+#elif defined(__GNUC__) && !defined(MBED) 
 // By inlining in GCC we avoid shedloads of warnings
+// When compiling with mbed it breaks things :(
 #define ALWAYS_INLINE inline
 #else
 // clang seems to hate being asked to inline when the definition

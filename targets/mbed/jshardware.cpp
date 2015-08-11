@@ -23,7 +23,6 @@ extern "C" {
 #include "jsinteractive.h"
 }
 
-#define MBED_PINS (32*5)
 
 // --------------------------------------------------- MBED DEFS
 #include "mbed.h"
@@ -32,11 +31,12 @@ Timer systemTime;
 unsigned int systemTimeHigh;
 bool systemTimeWasHigh;
 
-serial_t mbedSerial[USARTS];
+Serial pc(P0_24, P0_25);
+//serial_t mbedSerial[USART_COUNT];
 gpio_t mbedPins[MBED_PINS];
 extern "C" {
 
-// ---------------------------------------------------
+/*
 void mbedSerialIRQ(uint32_t id, SerialIrq event) {
   IOEventFlags device = EV_SERIAL1;  // TODO: device
 
@@ -52,6 +52,7 @@ void mbedSerialIRQ(uint32_t id, SerialIrq event) {
       serial_irq_set(&mbedSerial[id], TxIrq, 0);
   }
 }
+*/
 
 
 
@@ -64,13 +65,16 @@ void jshInit() {
   systemTime.start();
   int i;
   for (i=0;i<MBED_PINS;i++) {
-     gpio_init(&mbedPins[i], (PinName)(P0_0+i), PIN_INPUT);
+     gpio_init(&mbedPins[i], (PinName)(P0_0+i));
   }
-  for (i=0;i<USARTS;i++) {
+  /*for (i=0;i<USART_COUNT;i++) {
     serial_init(&mbedSerial[i], USBTX, USBRX); // FIXME Pin
     serial_irq_handler(&mbedSerial[i], &mbedSerialIRQ, i);
     // serial_irq_set(&mbedSerial[i], RxIrq, 1); // FIXME Rx IRQ just crashes when called
-  }
+  }*/
+}
+
+void jshReset() {
 }
 
 void jshKill() {
@@ -83,13 +87,16 @@ void jshIdle() {
     inited = true;
     jsiOneSecondAfterStartup();
   }
-
   /*static bool foo = false;
   foo = !foo;
   jshPinSetValue(LED1_PININDEX, foo);*/
+  int c = jshGetCharToTransmit(EV_SERIAL1);
+  if (c>=0) pc.putc(c);
 
-  while (serial_readable(&mbedSerial[0])>0)
-        jshPushIOCharEvent(EV_SERIAL1, serial_getc(&mbedSerial[0]));
+  while (pc.readable()>0)
+   jshPushIOCharEvent(EV_SERIAL1, pc.getc());
+/*  while (serial_readable(&mbedSerial[0])>0)
+        jshPushIOCharEvent(EV_SERIAL1, serial_getc(&mbedSerial[0]));*/
 }
 
 // ----------------------------------------------------------------------------
@@ -116,6 +123,14 @@ void jshPinSetState(Pin pin, JshPinState state) {
 
 }
 
+JshPinState jshPinGetState(Pin pin) {
+  return (JshPinState)0;
+}
+
+JshPinFunction jshGetCurrentPinFunction(Pin pin) {
+  return (JshPinFunction)0;
+}
+
 void jshPinSetValue(Pin pin, bool value) {
   gpio_dir(&mbedPins[pin], PIN_OUTPUT);
   gpio_write(&mbedPins[pin], value);
@@ -126,10 +141,6 @@ bool jshPinGetValue(Pin pin) {
   return gpio_read(&mbedPins[pin]);
 }
 
-bool jshIsPinValid(Pin pin) {
-  return pin>=0 && pin<MBED_PINS;
-  return false;
-}
 
 bool jshIsDeviceInitialised(IOEventFlags device) { return true; }
 
@@ -176,6 +187,10 @@ JshPinFunction jshPinAnalogOutput(Pin pin, JsVarFloat value, JsVarFloat freq) { 
 void jshPinPulse(Pin pin, bool value, JsVarFloat time) {
 }
 
+bool jshCanWatch(Pin pin) {
+  return false;
+}
+
 IOEventFlags jshPinWatch(Pin pin, bool shouldWatch) {
   return EV_NONE;
 }
@@ -194,12 +209,18 @@ void jshUSARTSetup(IOEventFlags device, JshUSARTInfo *inf) {
 /** Kick a device into action (if required). For instance we may need
  * to set up interrupts */
 void jshUSARTKick(IOEventFlags device) {
+  if (device==EV_SERIAL1) {
+    int c = jshGetCharToTransmit(EV_SERIAL1);
+    if (c>=0) pc.putc(c);
+  }
+/*
   int id = 0; // TODO: device
   int c = jshGetCharToTransmit(device);
   if (c >= 0) {
     serial_irq_set(&mbedSerial[id], TxIrq, 1);
     serial_putc(&mbedSerial[id], c);
   }
+*/
 }
 
 void jshSPISetup(IOEventFlags device, JshSPIInfo *inf) {
@@ -225,6 +246,9 @@ void jshSPISet16(IOEventFlags device, bool is16) {
 void jshSPISetReceive(IOEventFlags device, bool isReceive) {
 }
 
+void jshSPIWait(IOEventFlags device) {
+}
+
 void jshI2CSetup(IOEventFlags device, JshI2CInfo *inf) {
 }
 
@@ -236,7 +260,6 @@ void jshI2CRead(IOEventFlags device, unsigned char address, int nBytes, unsigned
 
 /// Enter simple sleep mode (can be woken up by interrupts). Returns true on success
 bool jshSleep(JsSysTime timeUntilWake) {
-   __WFI(); // Wait for Interrupt
    return true;
 }
 
@@ -253,6 +276,8 @@ JsVarFloat jshReadTemperature() { return NAN; };
 JsVarFloat jshReadVRef()  { return NAN; };
 unsigned int jshGetRandomNumber() { return rand(); }
 
+void jshEnableWatchDog(JsVarFloat timeout) {}
+
 bool jshFlashGetPage(uint32_t addr, uint32_t *startAddr, uint32_t *pageSize) {
   return false;
 }
@@ -261,10 +286,20 @@ void jshFlashErasePage(uint32_t addr) {
 }
 
 void jshFlashRead(void *buf, uint32_t addr, uint32_t len) {
+  char *b = (char*)buf;
+  while (len--) *(b++)=0xFF;
 }
+
 
 void jshFlashWrite(void *buf, uint32_t addr, uint32_t len) {
 }
 
 // ----------------------------------------------------------------------------
+
+// hmm - nasty hack to export #define as a real function
+int _isfinite(double d) { return isfinite(d); }
+#undef isfinite
+int isfinite(double d) { return _isfinite(d); }
+
+
 } // extern C

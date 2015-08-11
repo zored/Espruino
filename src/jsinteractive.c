@@ -475,11 +475,11 @@ void jsiAppendHardwareInitialisation(JsVar *str, bool addCallbacks) {
 
   jsiAppendSerialInitialisation(str, "USB", addCallbacks);
   int i;
-  for (i=0;i<USARTS;i++)
+  for (i=0;i<USART_COUNT;i++)
     jsiAppendSerialInitialisation(str, jshGetDeviceString(EV_SERIAL1+i), addCallbacks);
-  for (i=0;i<SPIS;i++)
+  for (i=0;i<SPI_COUNT;i++)
     jsiAppendDeviceInitialisation(str, jshGetDeviceString(EV_SPI1+i));
-  for (i=0;i<I2CS;i++)
+  for (i=0;i<I2C_COUNT;i++)
     jsiAppendDeviceInitialisation(str, jshGetDeviceString(EV_I2C1+i));
   // pins
   Pin pin;
@@ -565,7 +565,6 @@ void jsiSemiInit(bool autoLoad) {
   // Set defaults
   jsiStatus = JSIS_NONE;
   pinBusyIndicator = DEFAULT_BUSY_PIN_INDICATOR;
-
   /* If flash contains any code, then we should
      Try and load from it... */
   bool loadFlash = autoLoad && jsfFlashContainsCode();
@@ -603,7 +602,7 @@ void jsiSemiInit(bool autoLoad) {
 
 // The 'proper' init function - this should be called only once at bootup
 void jsiInit(bool autoLoad) {
-#ifdef LINUX
+#if defined(LINUX) || defined(MBED)
   consoleDevice = DEFAULT_CONSOLE_DEVICE;
 #else
   consoleDevice = EV_LIMBO;
@@ -1412,7 +1411,7 @@ void jsiIdle() {
   if (jshGetEventsUsed() < IOBUFFER_XON) { 
     jshSetFlowControlXON(EV_USBSERIAL, true);
     int i;
-    for (i=0;i<USARTS;i++)
+    for (i=0;i<USART_COUNT;i++)
       jshSetFlowControlXON(EV_SERIAL1+i, true);
   }
 

@@ -14,7 +14,7 @@
 #include "jsutils.h"
 #include "jsvar.h"
 
-#ifdef ARM
+#if defined(ARM) && !defined(MBED)
 #include "mconf.h"
 #include "protos.h"
 #else
