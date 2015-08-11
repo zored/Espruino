@@ -187,7 +187,7 @@ elif board.chip["family"]=="NORDIC":
   codeOut("#define ARM")
   codeOut("#define USE_MATH")
   codeOut("#define MBED")
-  codeOut("#define MBED_PINS 0")
+  codeOut("#define MBED_PINS 24")
 else:
   die('Unknown chip family '+board.chip["family"])
 

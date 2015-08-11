@@ -33,8 +33,11 @@ bool systemTimeWasHigh;
 
 Serial pc(P0_24, P0_25);
 //serial_t mbedSerial[USART_COUNT];
-gpio_t mbedPins[MBED_PINS];
 extern "C" {
+
+void mbedSetupGPIO(gpio_t *gpio, Pin pin) {
+  gpio_init(gpio, (PinName)(P0_0+pin));
+}
 
 /*
 void mbedSerialIRQ(uint32_t id, SerialIrq event) {
@@ -64,9 +67,6 @@ void jshInit() {
   systemTimeHigh = 0;
   systemTime.start();
   int i;
-  for (i=0;i<MBED_PINS;i++) {
-     gpio_init(&mbedPins[i], (PinName)(P0_0+i));
-  }
   /*for (i=0;i<USART_COUNT;i++) {
     serial_init(&mbedSerial[i], USBTX, USBRX); // FIXME Pin
     serial_irq_handler(&mbedSerial[i], &mbedSerialIRQ, i);
@@ -132,13 +132,17 @@ JshPinFunction jshGetCurrentPinFunction(Pin pin) {
 }
 
 void jshPinSetValue(Pin pin, bool value) {
-  gpio_dir(&mbedPins[pin], PIN_OUTPUT);
-  gpio_write(&mbedPins[pin], value);
+  gpio_t gpio;
+  mbedSetupGPIO(&gpio, pin);
+  gpio_dir(&gpio, PIN_OUTPUT);
+  gpio_write(&gpio, value);
 }
 
 bool jshPinGetValue(Pin pin) {
-  gpio_dir(&mbedPins[pin], PIN_INPUT);
-  return gpio_read(&mbedPins[pin]);
+  gpio_t gpio;
+  mbedSetupGPIO(&gpio, pin);
+  gpio_dir(&gpio, PIN_INPUT);
+  return gpio_read(&gpio);
 }
 
 
