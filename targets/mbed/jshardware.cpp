@@ -36,7 +36,7 @@ Serial pc(P0_24, P0_25);
 extern "C" {
 
 void mbedSetupGPIO(gpio_t *gpio, Pin pin) {
-  gpio_init(gpio, (PinName)(P0_0+pin));
+  gpio_init(gpio, (PinName)(P0_0+pinInfo[pin].pin));
 }
 
 /*
