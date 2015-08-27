@@ -29,6 +29,7 @@
 #ifdef ESPRUINOBOARD
 // STM32F1 boards should work with this - but for some reason they crash on init
 #define USE_RTC
+#define USE_RTC_FOR_TIME
 #endif
 
 #ifdef PICO
@@ -42,24 +43,44 @@
 #define IRQ_PRIOR_LOW 15
 
 #ifdef USE_RTC
+#define RTC_INITIALISE_TICKS 4 // SysTicks before we initialise the RTC - we need to wait until the LSE starts up properly
+unsigned short jshRTCPrescaler;
+#endif // USE_RTC
 
+#ifdef USE_RTC_FOR_TIME
 #include "jswrap_date.h" // for non-F1 calendar -> days since 1970 conversion
 
-// TODO: could jshRTCPrescaler (and the hardware prescaler) be modified on SysTick, to calibrate the LSI against the HSE?
-unsigned short jshRTCPrescaler;
 unsigned short jshRTCPrescalerReciprocal; // (JSSYSTIME_SECOND << RTC_PRESCALER_RECIPROCAL_SHIFT) /  jshRTCPrescaler;
 #define RTC_PRESCALER_RECIPROCAL_SHIFT 10
-#define RTC_INITIALISE_TICKS 4 // SysTicks before we initialise the RTC - we need to wait until the LSE starts up properly
 #define JSSYSTIME_EXTRA_BITS 8 // extra bits we shove on under the RTC (we try and get these from SysTick)
 #define JSSYSTIME_SECOND_SHIFT 20
 #define JSSYSTIME_SECOND (1<<JSSYSTIME_SECOND_SHIFT) // Random value we chose - the accuracy we're allowing (1 microsecond)
-
 JsSysTime jshGetRTCSystemTime();
-#else
-#define jshGetRTCSystemTime jshGetSystemTime
-#endif
+#endif // USE_RTC_FOR_TIME
+
+
 
 static JsSysTime jshGetTimeForSecond();
+
+volatile unsigned int ticksSinceStart = 0;
+
+#ifdef USE_RTC_FOR_TIME
+// Average time between SysTicks
+volatile unsigned int averageSysTickTime=0;
+// last system time there was a systick
+volatile JsSysTime lastSysTickTime=0;
+
+// Smoothing allows us to take the 32k from the RTC and use it for high res timing
+// Smoothed version of averageSysTickTime
+volatile unsigned int smoothAverageSysTickTime=0;
+// Smoothed version of lastSysTickTime
+volatile JsSysTime smoothLastSysTickTime=0;
+
+// whether we have slept since the last SysTick
+bool hasSystemSlept;
+#else
+volatile JsSysTime SysTickMajor = SYSTICK_RANGE;
+#endif
 
 
 // see jshPinWatch/jshGetWatchedPinState
@@ -721,19 +742,6 @@ static void NO_INLINE jshPrintCapablePins(Pin existingPin, const char *functionN
 }
 
 // ----------------------------------------------------------------------------
-volatile unsigned int ticksSinceStart = 0;
-#ifdef USE_RTC
-// Average time between SysTicks
-volatile unsigned int averageSysTickTime=0, smoothAverageSysTickTime=0;
-// last system time there was a systick
-volatile JsSysTime lastSysTickTime=0, smoothLastSysTickTime=0;
-// whether we have slept since the last SysTick
-bool hasSystemSlept;
-
-#else
-volatile JsSysTime SysTickMajor = SYSTICK_RANGE;
-#endif
-
 
 static bool jshIsRTCAlreadySetup(bool andRunning) {
   if ((RCC->BDCR & RCC_BDCR_RTCEN) == 0)
@@ -757,7 +765,9 @@ void jshSetupRTCPrescaler(bool isUsingLSI) {
   } else {
     jshRTCPrescaler = 32768; // 32kHz for LSE
   }
+#ifdef USE_RTC_FOR_TIME
   jshRTCPrescalerReciprocal = (unsigned short)((((unsigned int)JSSYSTIME_SECOND) << RTC_PRESCALER_RECIPROCAL_SHIFT) /  jshRTCPrescaler);
+#endif
 }
 #endif
 
@@ -824,7 +834,9 @@ void jshDoSysTick() {
       }
     }
   }
+#endif
 
+#ifdef USE_RTC_FOR_TIME
   JsSysTime time = jshGetRTCSystemTime();
   if (!hasSystemSlept && ticksSinceStart>RTC_INITIALISE_TICKS) {
     /* Ok - slightly crazy stuff here. So the normal jshGetSystemTime is now
@@ -1166,16 +1178,16 @@ void jshInit() {
   RCC_PCLK2Config(RCC_HCLK_Div4);
   /* System Clock */
   SysTick_CLKSourceConfig(SysTick_CLKSource_HCLK_Div8);
-#ifdef USE_RTC
+#ifdef USE_RTC_FOR_TIME
   ticksSinceStart = 0;
 #endif
   SysTick_Config(SYSTICK_RANGE-1); // 24 bit
   NVIC_SetPriority(SysTick_IRQn, IRQ_PRIOR_SYSTICK);
 
-#ifdef USE_RTC
+#ifdef USE_RTC_FOR_TIME
   // work out initial values for RTC
   averageSysTickTime = smoothAverageSysTickTime = (unsigned int)(((JsVarFloat)jshGetTimeForSecond() * (JsVarFloat)SYSTICK_RANGE) / (JsVarFloat)getSystemTimerFreq());
-  lastSysTickTime = smoothLastSysTickTime = jshGetRTCSystemTime();
+  lastSysTickTime = smoothLastSysTickTime= jshGetRTCSystemTime();
 #endif
 
   jshResetSerial();
@@ -1384,7 +1396,7 @@ bool jshIsUSBSERIALConnected() {
 }
 
 static JsSysTime jshGetTimeForSecond() {
-#ifdef USE_RTC
+#ifdef USE_RTC_FOR_TIME
   return (JsSysTime)JSSYSTIME_SECOND;
 #else
   return (JsSysTime)getSystemTimerFreq();
@@ -1399,7 +1411,7 @@ JsVarFloat jshGetMillisecondsFromTime(JsSysTime time) {
   return ((JsVarFloat)time)*1000/(JsVarFloat)jshGetTimeForSecond();
 }
 
-#ifdef USE_RTC
+#ifdef USE_RTC_FOR_TIME
 #ifdef STM32F1
 unsigned short rtcHighBits = 0;
 unsigned int rtcLastCall = 0;
@@ -1446,10 +1458,10 @@ JsSysTime jshGetRTCSystemTime() {
 #endif
   return (((JsSysTime)c) << JSSYSTIME_SECOND_SHIFT) | (JsSysTime)((((unsigned int)jshRTCPrescaler - (unsigned int)(dl+1))*(unsigned int)jshRTCPrescalerReciprocal) >> RTC_PRESCALER_RECIPROCAL_SHIFT);
 }
-#endif
+#endif // USE_RTC_FOR_TIME
 
 JsSysTime jshGetSystemTime() {
-#ifdef USE_RTC
+#ifdef USE_RTC_FOR_TIME
   if (ticksSinceStart<=RTC_INITIALISE_TICKS)
     return jshGetRTCSystemTime(); // Clock hasn't stabilised yet, just use whatever RTC value we currently have
   if (hasSystemSlept) {
@@ -1488,7 +1500,7 @@ JsSysTime jshGetSystemTime() {
 void jshSetSystemTime(JsSysTime newTime) {
   jshInterruptOff();
   // NOTE: Subseconds are not set here
-#ifdef USE_RTC
+#ifdef USE_RTC_FOR_TIME
 
 #ifdef STM32F1
   rtcLastCall = (unsigned int)(newTime>>JSSYSTIME_SECOND_SHIFT);
@@ -1519,11 +1531,10 @@ void jshSetSystemTime(JsSysTime newTime) {
   RTC_WaitForSynchro();
 #endif // !STM32F1
 
-
   hasSystemSlept = true;
-#else // !USE_RTC
+#else // !USE_RTC_FOR_TIME
   SysTickMajor = newTime;
-#endif // !USE_RTC
+#endif // !USE_RTC_FOR_TIME
   jshInterruptOn();
   jshGetSystemTime(); // force update of the time
 }
@@ -2475,7 +2486,7 @@ bool jshSleep(JsSysTime timeUntilWake) {
       !jshHasTransmitData() && // if we're transmitting, we don't want USART/etc to get slowed down
 #ifdef USB
       !jshIsUSBSERIALConnected() &&
-      jshLastWokenByUSB+jshGetTimeForSecond()<jshGetRTCSystemTime() && // if woken by USB, stay awake long enough for the PC to make a connection
+      jshLastWokenByUSB+jshGetTimeForSecond()<jshGetSystemTime() && // if woken by USB, stay awake long enough for the PC to make a connection
 #endif
       true
       ) {
@@ -2515,9 +2526,12 @@ bool jshSleep(JsSysTime timeUntilWake) {
 #endif
 #endif // USB
 
+#ifndef USE_RTC_FOR_TIME
+      JsSysTime timeAsleep = 0;
+#endif
+
     if (timeUntilWake!=JSSYSTIME_MAX) { // set alarm
       unsigned int ticks = (unsigned int)(timeUntilWake/jshGetTimeForSecond()); // ensure we round down and leave a little time
-
 #ifdef STM32F1
       /* If we're going asleep for more than a few seconds,
        * add one second to the sleep time so that when we
@@ -2534,9 +2548,15 @@ bool jshSleep(JsSysTime timeUntilWake) {
         // if the delay is small enough, clock the WakeUp counter faster so we can sleep more accurately
         RTC_WakeUpClockConfig(RTC_WakeUpClock_RTCCLK_Div16);
         ticks = (unsigned int)((timeUntilWake*jshRTCPrescaler) / (jshGetTimeForSecond()*16));
+#ifndef USE_RTC_FOR_TIME
+        timeAsleep = ticks*jshGetTimeForSecond()*16/jshRTCPrescaler;
+#endif
       } else { // wakeup in seconds
         RTC_WakeUpClockConfig(RTC_WakeUpClock_CK_SPRE_16bits);
         if (ticks > 65535) ticks = 65535;
+#ifndef USE_RTC_FOR_TIME
+        timeAsleep = jshGetTimeForSecond()*ticks;
+#endif
       }
       RTC_SetWakeUpCounter(ticks - 1); // 0 based
       RTC_ITConfig(RTC_IT_WUT, ENABLE);
@@ -2544,12 +2564,18 @@ bool jshSleep(JsSysTime timeUntilWake) {
       RTC_ClearFlag(RTC_FLAG_WUTF);
 #endif
     }
+#ifdef USE_RTC_FOR_TIME
     // set flag in case there happens to be a SysTick
     hasSystemSlept = true;
+#endif
     // -----------------------------------------------
 #ifdef STM32F4
     /* FLASH Deep Power Down Mode enabled */
     PWR_FlashPowerDownCmd(ENABLE);
+#endif
+#ifndef USE_RTC_FOR_TIME
+    // increase the SysTick timer as it's about to stop
+    SysTickMajor += timeAsleep;
 #endif
     /* Request to enter STOP mode with regulator in low power mode*/
     PWR_EnterSTOPMode(PWR_Regulator_LowPower, PWR_STOPEntry_WFI);
@@ -2593,14 +2619,14 @@ bool jshSleep(JsSysTime timeUntilWake) {
 #ifdef USB
     jshSetUSBPower(true);
     if (wokenByUSB)
-      jshLastWokenByUSB = jshGetRTCSystemTime();
+      jshLastWokenByUSB = jshGetSystemTime();
 #endif
     jsiSetSleep(JSI_SLEEP_AWAKE);
   } else
 #endif
   {
     JsSysTime sysTickTime;
-#ifdef USE_RTC
+#ifdef USE_RTC_FOR_TIME
     sysTickTime = averageSysTickTime*5/4;
 #else
     sysTickTime = SYSTICK_RANGE*5/4;
