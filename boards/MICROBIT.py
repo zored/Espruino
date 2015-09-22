@@ -1,7 +1,7 @@
 #!/bin/false
 # This file is part of Espruino, a JavaScript interpreter for Microcontrollers
 #
-# Copyright (C) 2013 Gordon Williams <gw@pur3.co.uk>
+# Copyright (C) 2015 Gordon Williams <gw@pur3.co.uk>
 #
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -23,10 +23,10 @@ info = {
 };
 chip = {
   'part' : "NRF51822",
-  'family' : "NORDIC",
+  'family' : "NRF51",
 #  'package' : "LQFP64",
   'ram' : 16,
-  'flash' : 128,
+  'flash' : 256,
   'speed' : 96,
   'usart' : 1,
   'spi' : 1,
@@ -46,7 +46,6 @@ board_css = """
 """;
 
 def get_pins():
-  #pins = pinutils.generate_pins(0,23)  
   pins = [
    { "name":"PD0", "sortingname":"D00", "port":"D", "num":"3", "functions":{}, "csv":{} },
    { "name":"PD1", "sortingname":"D01", "port":"D", "num":"2", "functions":{}, "csv":{} },
