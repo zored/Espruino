@@ -549,7 +549,7 @@ ifeq ($(USE_CRYPTO),1)
     include make/crypto/$(FAMILY).make
   else
     include make/crypto/default.make
-  endif 
+  endif
 endif
 
 ifeq ($(USE_NEOPIXEL),1)
