@@ -401,6 +401,12 @@ for device in ["USB","SD","LCD","JTAG","ESP8266","IR"]:
     for entry in board.devices[device]:
       if entry[:3]=="pin": usedPinChecks.append("(PIN)==" + toPinDef(board.devices[device][entry])+"/* "+device+" */")
 
+
+# Dump pin definitions
+for p in pins:
+    rawName = p['name'].lstrip('P')
+    codeOut('#define {0}_PININDEX {1}'.format(rawName, toPinDef(rawName)))
+
 # Specific hacks for nucleo boards
 if "NUCLEO_A" in board.devices:
   for n,pin in enumerate(board.devices["NUCLEO_A"]):
