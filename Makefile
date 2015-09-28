@@ -68,6 +68,7 @@ endif
 INCLUDE=-I$(ROOT) -I$(ROOT)/targets -I$(ROOT)/src -I$(ROOT)/gen
 LIBS=
 DEFINES=
+WRAPPERSOURCES=
 CFLAGS=-Wall -Wextra -Wconversion -Werror=implicit-function-declaration
 LDFLAGS=-Winline
 OPTIMIZEFLAGS=
@@ -546,7 +547,7 @@ OPTIMIZEFLAGS+=-pg
 endif
 
 WRAPPERFILE=gen/jswrapper.c
-WRAPPERSOURCES = \
+WRAPPERSOURCES += \
 src/jswrap_array.c \
 src/jswrap_arraybuffer.c \
 src/jswrap_date.c \
