@@ -63,6 +63,7 @@ endif
 INCLUDE?=-I$(ROOT) -I$(ROOT)/targets -I$(ROOT)/src -I$(GENDIR)
 LIBS?=
 DEFINES?=
+WRAPPERSOURCES=
 CFLAGS?=-Wall -Wextra -Wconversion -Werror=implicit-function-declaration -fno-strict-aliasing -g
 LDFLAGS?=-Winline -g
 OPTIMIZEFLAGS?=
