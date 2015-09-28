@@ -61,50 +61,8 @@ board_css = """
 """;
 
 def get_pins():
-    pinmapping = { 
-        'PIN0' :'PB10',
-        'PIN1' :'PB11',
-        'PIN2' :'PA6',
-        'PIN3' :'PA7',
-        'PIN4' :'PB1',
-        'PIN5' :'PC3',
-        'PIN6' :'PB0',
-        'PIN7' :'PC2',
-        'PIN8' :'PC1',
-        'PIN9' :'PC0',
-        'PIN10':'PC9',
-        'PIN11':'PA8',
-        'PIN12':'PC12',
-        'PIN13':'PD2',
-        'PINA0':'PA0',
-        'PINA1':'PA1',
-        'PINA2':'PA2',
-        'PINA3':'PA3',
-        'PINA4':'PA4',
-        'PINA5':'PA5',
-    }
-
     pins = pinutils.scan_pin_file([], 'stm32f40x.csv', 6, 9, 10)
-    newpins = []
-
-    for iskra_name, stm32_name in pinmapping.items():
-        pin = pinutils.findpin(pins, stm32_name, True)
-        pin["name"] = iskra_name
-        pin["sortingname"] = iskra_name[3:].rjust(2, '0')
-        newpins.append(pin) 
-
-    newpins.sort(key=lambda p: p['sortingname'])
-
-    reserved_names = []
-    for dev in devices.values():
-        for port in dev.values():
-            reserved_names.append('P' + port)
-
-    for name in reserved_names:
-        pin = pinutils.findpin(pins, name, True)
-        newpins.append(pin)
-
-    return newpins
+    return pinutils.only_from_package(pinutils.fill_gaps_in_pin_list(pins), chip["package"])
 
 if __name__ == '__main__':
     from pprint import pprint
