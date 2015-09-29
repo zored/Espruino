@@ -32,15 +32,15 @@
 }*/
 /*JSON{"type" : "variable","name" : "P7",  "generate_full" : "C2_PININDEX",  "return" : ["pin","A Pin"]
 }*/
-/*JSON{"type" : "variable","name" : "P8",  "generate_full" : "C1_PININDEX",  "return" : ["pin","A Pin"]
+/*JSON{"type" : "variable","name" : "P8",  "generate_full" : "C6_PININDEX",  "return" : ["pin","A Pin"]
 }*/
-/*JSON{"type" : "variable","name" : "P9",  "generate_full" : "C0_PININDEX",  "return" : ["pin","A Pin"]
+/*JSON{"type" : "variable","name" : "P9",  "generate_full" : "C7_PININDEX",  "return" : ["pin","A Pin"]
 }*/
-/*JSON{"type" : "variable","name" : "P10",  "generate_full" : "C9_PININDEX",  "return" : ["pin","A Pin"]
+/*JSON{"type" : "variable","name" : "P10",  "generate_full" : "C8_PININDEX",  "return" : ["pin","A Pin"]
 }*/
-/*JSON{"type" : "variable","name" : "P11",  "generate_full" : "A8_PININDEX",  "return" : ["pin","A Pin"]
+/*JSON{"type" : "variable","name" : "P11",  "generate_full" : "C9_PININDEX",  "return" : ["pin","A Pin"]
 }*/
-/*JSON{"type" : "variable","name" : "P12",  "generate_full" : "C12_PININDEX",  "return" : ["pin","A Pin"]
+/*JSON{"type" : "variable","name" : "P12",  "generate_full" : "A8_PININDEX",  "return" : ["pin","A Pin"]
 }*/
-/*JSON{"type" : "variable","name" : "P13",  "generate_full" : "D2_PININDEX",  "return" : ["pin","A Pin"]
+/*JSON{"type" : "variable","name" : "P13",  "generate_full" : "A10_PININDEX",  "return" : ["pin","A Pin"]
 }*/
