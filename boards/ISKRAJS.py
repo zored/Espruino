@@ -19,6 +19,7 @@ info = {
     'name' : "Iskra.js",
     'link' :  [ "http://amperka.ru/product/iskra-js" ],
     'default_console' : "EV_SERIAL2",
+    'default_busy_pin_indicator' : "B7",
     'variables' : 5450,
     'binary_name' : 'espruino_%v_iskrajs.bin',
 }
