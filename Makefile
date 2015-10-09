@@ -45,6 +45,7 @@
 # MINISTM32_STRIVE=1
 # MINISTM32_ANGLED_VE=1
 # MINISTM32_ANGLED_VG=1
+# ISKRAJS=1
 # Or nothing for standard linux compile
 #
 # Also:
@@ -335,6 +336,7 @@ PRECOMPILED_OBJS+=$(ROOT)/targetlibs/stm32f4/lib/startup_stm32f429_439xx.o
 OPTIMIZEFLAGS+=-O3
 else ifdef ISKRAJS
 EMBEDDED=1
+USE_USB_HID=1
 USE_NET=1
 USE_GRAPHICS=1
 DEFINES += -DUSE_USB_OTG_FS=1
