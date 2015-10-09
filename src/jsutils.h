@@ -350,7 +350,7 @@ typedef int64_t JsSysTime;
   #define UNALIGNED_UINT16(addr) ((((uint16_t)*((uint8_t*)(addr)+1)) << 8) | (*(uint8_t*)(addr)))
 #else
   #define UNALIGNED_UINT16(addr) (*(uint16_t*)addr)
-#endif 
+#endif
 
 bool isWhitespace(char ch);
 bool isNumeric(char ch);
