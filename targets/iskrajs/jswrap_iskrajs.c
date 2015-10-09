@@ -16,9 +16,9 @@
 
 #include "jswrap_iskrajs.h"
 
-/*JSON{"type" : "variable","name" : "P0",  "generate_full" : "B10_PININDEX",  "return" : ["pin","A Pin"]
+/*JSON{"type" : "variable","name" : "P0",  "generate_full" : "B11_PININDEX",  "return" : ["pin","A Pin"]
 }*/
-/*JSON{"type" : "variable","name" : "P1",  "generate_full" : "B11_PININDEX",  "return" : ["pin","A Pin"]
+/*JSON{"type" : "variable","name" : "P1",  "generate_full" : "B10_PININDEX",  "return" : ["pin","A Pin"]
 }*/
 /*JSON{"type" : "variable","name" : "P2",  "generate_full" : "A6_PININDEX",  "return" : ["pin","A Pin"]
 }*/
