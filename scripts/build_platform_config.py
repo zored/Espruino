@@ -74,16 +74,16 @@ flash_page_size = 1024
 
 if LINUX:
   flash_saved_code_pages = 8
-  total_flash = flash_page_size*flash_saved_code_pages  
+  total_flash = flash_page_size*flash_saved_code_pages
 else: # NOT LINUX
   # 100xB and 103xB are mid-density, so have 1k page sizes
   if board.chip["part"][:7]=="STM32F1" and board.chip["part"][10]=="B": board.chip["subfamily"]="MD";
 
-  if board.chip["family"]=="STM32F1": 
+  if board.chip["family"]=="STM32F1":
     flash_page_size = 1024 if "subfamily" in board.chip and board.chip["subfamily"]=="MD" else 2048
   if board.chip["family"]=="STM32F2":
     flash_page_size = 128*1024
-  if board.chip["family"]=="STM32F3": 
+  if board.chip["family"]=="STM32F3":
     flash_page_size = 2*1024
   if board.chip["family"]=="STM32F4":
     flash_page_size = 128*1024
@@ -168,7 +168,7 @@ codeOut("")
 linker_end_var = "_end";     # End of RAM (eg top of stack)
 linker_etext_var = "_etext"; # End of text (function) section
 # External interrupt count
-exti_count = 16 
+exti_count = 16
 
 if board.chip["family"]=="LINUX":
   board.chip["class"]="LINUX"
@@ -243,15 +243,18 @@ codeOut("""
 #define SYSTICK_RANGE 0x1000000 // the Maximum (it is a 24 bit counter) - on Olimexino this is about 0.6 sec
 #define SYSTICKS_BEFORE_USB_DISCONNECT 2
 
-#define DEFAULT_BUSY_PIN_INDICATOR (Pin)-1 // no indicator
-#define DEFAULT_SLEEP_PIN_INDICATOR (Pin)-1 // no indicator
-
 // When to send the message that the IO buffer is getting full
 #define IOBUFFER_XOFF ((TXBUFFERMASK)*6/8)
 // When to send the message that we can start receiving again
 #define IOBUFFER_XON ((TXBUFFERMASK)*3/8)
 
+#define DEFAULT_SLEEP_PIN_INDICATOR (Pin)-1 // no indicator
 """);
+
+if 'default_busy_pin_indicator' in board.info:
+  codeOut("#define DEFAULT_BUSY_PIN_INDICATOR " + toPinDef(board.info['default_busy_pin_indicator']))
+else:
+  codeOut("#define DEFAULT_BUSY_PIN_INDICATOR (Pin)-1 // no indicator")
 
 util_timer = pinutils.get_device_util_timer(board)
 if util_timer!=False:
@@ -268,10 +271,10 @@ if variables==0:
 else:
   codeOut("#define JSVAR_CACHE_SIZE                "+str(variables)+" // Number of JavaScript variables in RAM")
 
-if LINUX:  
+if LINUX:
   codeOut("#define FLASH_START                     "+hex(0x10000000))
   codeOut("#define FLASH_PAGE_SIZE                 "+str(flash_page_size))
-else:  
+else:
   codeOut("#define FLASH_AVAILABLE_FOR_CODE        "+str(int(flash_available_for_code)))
   if board.chip["class"]=="EFM32":
     codeOut("// FLASH_PAGE_SIZE defined in em_device.h");
@@ -325,7 +328,7 @@ else:
   # NRF52 needs this as Bluetooth traffic is funnelled through the buffer
   if board.chip["family"]=="NRF52": bufferSizeIO = 256
   # TX buffer - for print/write/etc
-  bufferSizeTX = 32 
+  bufferSizeTX = 32
   if board.chip["ram"]>=20: bufferSizeTX = 128
   bufferSizeTimer = 4 if board.chip["ram"]<20 else 16
 
