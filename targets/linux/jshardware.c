@@ -165,8 +165,7 @@ bool jshGetDevicePath(IOEventFlags device, char *buf, size_t bufSize) {
     jsvGetString(str, buf, bufSize);
     success = true;
   }
-  jsvUnLock(str);
-  jsvUnLock(obj);
+  jsvUnLock2(str, obj);
   return success;
 }
 
@@ -513,7 +512,7 @@ JsSysTime jshGetSystemTime() {
 #else
   struct timeval tm;
   gettimeofday(&tm, 0);
-  return tm.tv_sec*1000000L + tm.tv_usec;
+  return (JsSysTime)(tm.tv_sec)*1000000L + tm.tv_usec;
 #endif
 }
 
@@ -535,7 +534,7 @@ int jshPinAnalogFast(Pin pin) {
   return 0;
 }
 
-JshPinFunction jshPinAnalogOutput(Pin pin, JsVarFloat value, JsVarFloat freq) { // if freq<=0, the default is used
+JshPinFunction jshPinAnalogOutput(Pin pin, JsVarFloat value, JsVarFloat freq, JshAnalogOutputFlags flags) { // if freq<=0, the default is used
 #ifdef USE_WIRINGPI
   // todo pwmSetRange and pwmSetClock for freq?
   int v = (int)(value*1024);

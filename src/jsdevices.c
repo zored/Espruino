@@ -30,12 +30,23 @@ JshEventCallbackCallback jshEventCallbacks[EV_EXTI_MAX+1-EV_EXTI0];
 
 // ----------------------------------------------------------------------------
 //                                                         DATA TRANSMIT BUFFER
+
+/**
+ * A single character to be transmitted.
+ */
 typedef struct {
-  IOEventFlags flags; // Where this data should be transmitted
-  unsigned char data;         // data to transmit
+  IOEventFlags flags; //!< Where this data should be transmitted
+  unsigned char data; //!< data to transmit
 } PACKED_FLAGS TxBufferItem;
 
+/**
+ * An array of items to transmit.
+ */
 volatile TxBufferItem txBuffer[TXBUFFERMASK+1];
+
+/**
+ * The head and tail of the list.
+ */
 volatile unsigned char txHead=0, txTail=0;
 
 typedef enum {
@@ -45,7 +56,7 @@ typedef enum {
   SDS_XOFF_SENT = 4, // sending XON clears this
   SDS_FLOW_CONTROL_XON_XOFF = 8, // flow control enabled
 } PACKED_FLAGS JshSerialDeviceState;
-JshSerialDeviceState jshSerialDeviceStates[USARTS+1];
+JshSerialDeviceState jshSerialDeviceStates[USART_COUNT+1];
 
 // ----------------------------------------------------------------------------
 //                                                              IO EVENT BUFFER
@@ -55,12 +66,14 @@ volatile unsigned char ioHead=0, ioTail=0;
 // ----------------------------------------------------------------------------
 
 
-
+/**
+ * Initialize all the devices.
+ */
 void jshInitDevices() { // called from jshInit
   int i;
   // setup flow control
   jshSerialDeviceStates[0] = SDS_FLOW_CONTROL_XON_XOFF; // USB
-  for (i=1;i<=USARTS;i++)
+  for (i=1;i<=USART_COUNT;i++)
     jshSerialDeviceStates[i] = SDS_NONE;
   // set up callbacks for events
   for (i=EV_EXTI0;i<=EV_EXTI_MAX;i++)
@@ -69,8 +82,13 @@ void jshInitDevices() { // called from jshInit
 
 // ----------------------------------------------------------------------------
 
-// Queue a character for transmission
-void jshTransmit(IOEventFlags device, unsigned char data) {
+/**
+ * Queue a character for transmission.
+ */
+void jshTransmit(
+    IOEventFlags device, //!< The device to be used for transmission.
+    unsigned char data   //!< The character to transmit.
+  ) {
   if (device==EV_LOOPBACKA || device==EV_LOOPBACKB) {
     jshPushIOCharEvent(device==EV_LOOPBACKB ? EV_LOOPBACKA : EV_LOOPBACKB, (char)data);
     return;
@@ -89,7 +107,12 @@ void jshTransmit(IOEventFlags device, unsigned char data) {
     return;
   }
 #endif
+  // If the device is EV_NONE then there is nowhere to send the data.
   if (device==EV_NONE) return;
+
+  // The txHead global points to the current item in the txBuffer.  Since we are adding a new
+  // character, we increment the head pointer.   If it has caught up with the tail, then that means
+  // we have filled the array backing the list.  What we do next is to wait for space to free up.
   unsigned char txHeadNext = (unsigned char)((txHead+1)&TXBUFFERMASK);
   if (txHeadNext==txTail) {
     jsiSetBusy(BUSY_TRANSMIT, true);
@@ -102,6 +125,7 @@ void jshTransmit(IOEventFlags device, unsigned char data) {
     }
     jsiSetBusy(BUSY_TRANSMIT, false);
   }
+  // Save the device and data for the new character to be transmitted.
   txBuffer[txHead].flags = device;
   txBuffer[txHead].data = data;
   txHead = txHeadNext;
@@ -115,8 +139,13 @@ IOEventFlags jshGetDeviceToTransmit() {
   return IOEVENTFLAGS_GETTYPE(txBuffer[txTail].flags);
 }
 
-// Try and get a character for transmission - could just return -1 if nothing
-int jshGetCharToTransmit(IOEventFlags device) {
+/**
+ * Try and get a character for transmission.
+ * \return The next byte to transmit or -1 if there is none.
+ */
+int jshGetCharToTransmit(
+    IOEventFlags device // The device being looked at for a transmission.
+  ) {
   if (DEVICE_IS_USART(device)) {
     JshSerialDeviceState *deviceState = &jshSerialDeviceStates[device-EV_USBSERIAL];
     if ((*deviceState)&SDS_XOFF_PENDING) {
@@ -129,13 +158,13 @@ int jshGetCharToTransmit(IOEventFlags device) {
     }
   }
 
-  unsigned char ptr = txTail;
-  while (txHead != ptr) {
-    if (IOEVENTFLAGS_GETTYPE(txBuffer[ptr].flags) == device) {
-      unsigned char data = txBuffer[ptr].data;
-      if (ptr != txTail) { // so we weren't right at the back of the queue
-        // we need to work back from ptr (until we hit tail), shifting everything forwards
-        unsigned char this = ptr;
+  unsigned char tempTail = txTail;
+  while (txHead != tempTail) {
+    if (IOEVENTFLAGS_GETTYPE(txBuffer[tempTail].flags) == device) {
+      unsigned char data = txBuffer[tempTail].data;
+      if (tempTail != txTail) { // so we weren't right at the back of the queue
+        // we need to work back from tempTail (until we hit tail), shifting everything forwards
+        unsigned char this = tempTail;
         unsigned char last = (unsigned char)((this+TXBUFFERMASK)&TXBUFFERMASK);
         while (this!=txTail) { // if this==txTail, then last is before it, so stop here
           txBuffer[this] = txBuffer[last];
@@ -146,7 +175,7 @@ int jshGetCharToTransmit(IOEventFlags device) {
       txTail = (unsigned char)((txTail+1)&TXBUFFERMASK); // advance the tail
       return data; // return data
     }
-    ptr = (unsigned char)((ptr+1)&TXBUFFERMASK);
+    tempTail = (unsigned char)((tempTail+1)&TXBUFFERMASK);
   }
   return -1; // no data :(
 }
@@ -157,59 +186,78 @@ void jshTransmitFlush() {
   jsiSetBusy(BUSY_TRANSMIT, false);
 }
 
-// Clear everything from a device
-void jshTransmitClearDevice(IOEventFlags device) {
+/**
+ * Discard all the data waiting for transmission.
+ */
+void jshTransmitClearDevice(
+    IOEventFlags device //!< The device to be cleared.
+  ) {
+  // Keep requesting a character to transmit until there are no further characters.
   while (jshGetCharToTransmit(device)>=0);
 }
 
 /// Move all output from one device to another
 void jshTransmitMove(IOEventFlags from, IOEventFlags to) {
   jshInterruptOff();
-  unsigned char ptr = txTail;
-  while (ptr != txHead) {
-    if (IOEVENTFLAGS_GETTYPE(txBuffer[ptr].flags) == from) {
-      txBuffer[ptr].flags = (txBuffer[ptr].flags&~EV_TYPE_MASK) | to;
+  unsigned char tempTail = txTail;
+  while (tempTail != txHead) {
+    if (IOEVENTFLAGS_GETTYPE(txBuffer[tempTail].flags) == from) {
+      txBuffer[tempTail].flags = (txBuffer[tempTail].flags&~EV_TYPE_MASK) | to;
     }
-    ptr = (unsigned char)((ptr+1)&TXBUFFERMASK);
+    tempTail = (unsigned char)((tempTail+1)&TXBUFFERMASK);
   }
   jshInterruptOn();
 }
 
+/**
+ * Determine if we have data to be transmitted.
+ * \return True if we have data to transmit and false otherwise.
+ */
 bool jshHasTransmitData() {
   return txHead != txTail;
 }
 
-
+/**
+ * flag that the buffer has overflowed.
+ */
 void jshIOEventOverflowed() {
   // Error here - just set flag so we don't dump a load of data out
   jsErrorFlags |= JSERR_RX_FIFO_FULL;
 }
 
 
-void jshPushIOCharEvent(IOEventFlags channel, char charData) {
+/**
+ * Send a character to the specified device.
+ */
+void jshPushIOCharEvent(
+    IOEventFlags channel, // !< The device to target for output.
+    char charData         // !< The character to send to the device.
+  ) {
+  // Check for a CTRL+C
   if (charData==3 && channel==jsiGetConsoleDevice()) {
     // Ctrl-C - force interrupt
     execInfo.execute |= EXEC_CTRL_C;
     return;
   }
-  if (DEVICE_IS_USART(channel) && jshGetEventsUsed() > IOBUFFER_XOFF) 
-    jshSetFlowControlXON(channel, false);
   // Check for existing buffer (we must have at least 2 in the queue to avoid dropping chars though!)
 #ifndef LINUX // no need for this on linux, and also potentially dodgy when multi-threading
-  unsigned char nextTail = (unsigned char)((ioTail+1) & IOBUFFERMASK);
-  if (ioHead!=ioTail && ioHead!=nextTail) {
+  unsigned char lastHead = (unsigned char)((ioHead+IOBUFFERMASK) & IOBUFFERMASK); // one behind head
+  if (ioHead!=ioTail && lastHead!=ioTail) {
     // we can do this because we only read in main loop, and we're in an interrupt here
-    unsigned char lastHead = (unsigned char)((ioHead+IOBUFFERMASK) & IOBUFFERMASK); // one behind head
-    if (IOEVENTFLAGS_GETTYPE(ioBuffer[lastHead].flags) == channel &&
-        IOEVENTFLAGS_GETCHARS(ioBuffer[lastHead].flags) < IOEVENT_MAXCHARS) {
-      // last event was for this event type, and it has chars left
+    if (IOEVENTFLAGS_GETTYPE(ioBuffer[lastHead].flags) == channel) {
       unsigned char c = (unsigned char)IOEVENTFLAGS_GETCHARS(ioBuffer[lastHead].flags);
-      ioBuffer[lastHead].data.chars[c] = charData;
-      IOEVENTFLAGS_SETCHARS(ioBuffer[lastHead].flags, c+1);
-      return;
+      if (c < IOEVENT_MAXCHARS) {
+        // last event was for this event type, and it has chars left
+        ioBuffer[lastHead].data.chars[c] = charData;
+        IOEVENTFLAGS_SETCHARS(ioBuffer[lastHead].flags, c+1);
+        return; // char added, job done
+      }
     }
   }
 #endif
+  // Set flow control (as we're going to use more data)
+  if (DEVICE_IS_USART(channel) && jshGetEventsUsed() > IOBUFFER_XOFF)
+    jshSetFlowControlXON(channel, false);
   // Make new buffer
   unsigned char nextHead = (unsigned char)((ioHead+1) & IOBUFFERMASK);
   if (ioTail == nextHead) {
@@ -222,9 +270,18 @@ void jshPushIOCharEvent(IOEventFlags channel, char charData) {
   ioHead = nextHead;
 }
 
-void jshPushIOWatchEvent(IOEventFlags channel) {
+/**
+ * Signal an IO watch event as having happened.
+ */
+void jshPushIOWatchEvent(
+    IOEventFlags channel //!< The channel on which the IO watch event has happened.
+  ) {
+  assert(channel >= EV_EXTI0 && channel <= EV_EXTI_MAX);
+
   bool state = jshGetWatchedPinState(channel);
 
+  // If there is a callback associated with this GPIO event then invoke
+  // it and we are done.
   if (jshEventCallbacks[channel-EV_EXTI0]) {
     jshEventCallbacks[channel-EV_EXTI0](state);
     return;
@@ -241,7 +298,13 @@ void jshPushIOWatchEvent(IOEventFlags channel) {
   jshPushIOEvent(channel | (state?EV_EXTI_IS_HIGH:0), time);
 }
 
-void jshPushIOEvent(IOEventFlags channel, JsSysTime time) {
+/**
+ * Add this IO event to the IO event queue.
+ */
+void jshPushIOEvent(
+    IOEventFlags channel, //!< The event to add to the queue.
+    JsSysTime time        //!< The time that the event is thought to have happened.
+  ) {
   unsigned char nextHead = (unsigned char)((ioHead+1) & IOBUFFERMASK);
   if (ioTail == nextHead) {
     jshIOEventOverflowed();
@@ -262,9 +325,17 @@ bool jshPopIOEvent(IOEvent *result) {
 
 // returns true on success
 bool jshPopIOEventOfType(IOEventFlags eventType, IOEvent *result) {
+  // Special case for top - it's easier!
+  if (IOEVENTFLAGS_GETTYPE(ioBuffer[ioTail].flags) == eventType)
+    return jshPopIOEvent(result);
+  // Now check non-top
   unsigned char i = ioTail;
   while (ioHead!=i) {
     if (IOEVENTFLAGS_GETTYPE(ioBuffer[i].flags) == eventType) {
+      /* We need IRQ off for this, because if we get data it's possible
+      that the IRQ will push data and will try and add characters to this
+      exact position in the buffer */
+      jshInterruptOff();
       *result = ioBuffer[i];
       // work back and shift all items in out queue
       unsigned char n = (unsigned char)((i+IOBUFFERMASK) & IOBUFFERMASK);
@@ -275,6 +346,7 @@ bool jshPopIOEventOfType(IOEventFlags eventType, IOEvent *result) {
       }
       // finally update the tail pointer, and return
       ioTail = (unsigned char)((ioTail+1) & IOBUFFERMASK);
+      jshInterruptOn();
       return true;
     }
     i = (unsigned char)((i+1) & IOBUFFERMASK);
@@ -282,6 +354,10 @@ bool jshPopIOEventOfType(IOEventFlags eventType, IOEvent *result) {
   return false;
 }
 
+/**
+ * Determine if we have I/O events to process.
+ * \return True if there are I/O events to be processed.
+ */
 bool jshHasEvents() {
   return ioHead!=ioTail;
 }
@@ -306,7 +382,14 @@ bool jshHasEventSpaceForChars(int n) {
 
 // ----------------------------------------------------------------------------
 //                                                                      DEVICES
-const char *jshGetDeviceString(IOEventFlags device) {
+
+/**
+ * Get a string representation of a device.
+ * \return A string representation of a device.
+ */
+const char *jshGetDeviceString(
+    IOEventFlags device //!< The device to be examined.
+  ) {
   switch (device) {
   case EV_LOOPBACKA: return "LoopbackA";
   case EV_LOOPBACKB: return "LoopbackB";
@@ -314,41 +397,50 @@ const char *jshGetDeviceString(IOEventFlags device) {
 #ifdef USB
   case EV_USBSERIAL: return "USB";
 #endif
+#ifdef BLUETOOTH
+  case EV_BLUETOOTH: return "Bluetooth";
+#endif
   case EV_SERIAL1: return "Serial1";
   case EV_SERIAL2: return "Serial2";
   case EV_SERIAL3: return "Serial3";
-#if USARTS>=4
+#if USART_COUNT>=4
   case EV_SERIAL4: return "Serial4";
 #endif
-#if USARTS>=5
+#if USART_COUNT>=5
   case EV_SERIAL5: return "Serial5";
 #endif
-#if USARTS>=6
+#if USART_COUNT>=6
   case EV_SERIAL6: return "Serial6";
 #endif
-#if SPIS>=1
+#if SPI_COUNT>=1
   case EV_SPI1: return "SPI1";
 #endif
-#if SPIS>=2
+#if SPI_COUNT>=2
   case EV_SPI2: return "SPI2";
 #endif
-#if SPIS>=3
+#if SPI_COUNT>=3
   case EV_SPI3: return "SPI3";
 #endif
-#if I2CS>=1
+#if I2C_COUNT>=1
   case EV_I2C1: return "I2C1";
 #endif
-#if I2CS>=2
+#if I2C_COUNT>=2
   case EV_I2C2: return "I2C2";
 #endif
-#if I2CS>=3
+#if I2C_COUNT>=3
   case EV_I2C3: return "I2C3";
 #endif
   default: return "";
   }
 }
 
-IOEventFlags jshFromDeviceString(const char *device) {
+/**
+ * Get a device identity from a string.
+ * \return A device identity.
+ */
+IOEventFlags jshFromDeviceString(
+    const char *device //!< A string representation of a device.
+  ) {
   if (device[0]=='L') {
     if (strcmp(&device[1], "oopbackA")==0) return EV_LOOPBACKA;
     if (strcmp(&device[1], "oopbackB")==0) return EV_LOOPBACKB;
@@ -358,41 +450,46 @@ IOEventFlags jshFromDeviceString(const char *device) {
     return EV_USBSERIAL;
   }
 #endif
+#ifdef BLUETOOTH
+  if (device[0]=='B') {
+     if (strcmp(&device[1], "luetooth")==0) return EV_BLUETOOTH;
+  }
+#endif
   else if (device[0]=='S') {
     if (device[1]=='e' && device[2]=='r' && device[3]=='i' && device[4]=='a' && device[5]=='l' && device[6]!=0 && device[7]==0) {
       if (device[6]=='1') return EV_SERIAL1;
       if (device[6]=='2') return EV_SERIAL2;
       if (device[6]=='3') return EV_SERIAL3;
-#if USARTS>=4
+#if USART_COUNT>=4
       if (device[6]=='4') return EV_SERIAL4;
 #endif
-#if USARTS>=5
+#if USART_COUNT>=5
       if (device[6]=='5') return EV_SERIAL5;
 #endif
-#if USARTS>=6
+#if USART_COUNT>=6
       if (device[6]=='6') return EV_SERIAL6;
 #endif
     }
     if (device[1]=='P' && device[2]=='I' && device[3]!=0 && device[4]==0) {
-#if SPIS>=1
+#if SPI_COUNT>=1
       if (device[3]=='1') return EV_SPI1;
 #endif
-#if SPIS>=2
+#if SPI_COUNT>=2
       if (device[3]=='2') return EV_SPI2;
 #endif
-#if SPIS>=3
+#if SPI_COUNT>=3
       if (device[3]=='3') return EV_SPI3;
 #endif
     }
   }
   else if (device[0]=='I' && device[1]=='2' && device[2]=='C' && device[3]!=0 && device[4]==0) {
-#if I2CS>=1
+#if I2C_COUNT>=1
     if (device[3]=='1') return EV_I2C1;
 #endif
-#if I2CS>=2
+#if I2C_COUNT>=2
     if (device[3]=='2') return EV_I2C2;
 #endif
-#if I2CS>=3
+#if I2C_COUNT>=3
     if (device[3]=='3') return EV_I2C3;
 #endif
   }
@@ -441,7 +538,11 @@ void jshSetFlowControlEnabled(IOEventFlags device, bool xOnXOff) {
 }
 
 /// Set a callback function to be called when an event occurs
-void jshSetEventCallback(IOEventFlags channel, JshEventCallbackCallback callback) {
+void jshSetEventCallback(
+    IOEventFlags channel,             //!< The event that fires the callback.
+    JshEventCallbackCallback callback //!< The callback to be invoked.
+  ) {
+  // Save the callback function for this event channel.
   assert(channel>=EV_EXTI0 && channel<=EV_EXTI_MAX);
   jshEventCallbacks[channel-EV_EXTI0] = callback;
 }

@@ -39,9 +39,9 @@ extern int isfinite ( double );
 
 
 #ifndef BUILDNUMBER
-#define JS_VERSION "1v80"
+#define JS_VERSION "1v81"
 #else
-#define JS_VERSION "1v80." BUILDNUMBER
+#define JS_VERSION "1v81." BUILDNUMBER
 #endif
 /*
   In code:
@@ -128,7 +128,7 @@ extern int isfinite ( double );
   #endif
 #endif
 
-#if __WORDSIZE == 64
+#if defined(__WORDSIZE) && __WORDSIZE == 64
 // 64 bit needs extra space to be able to store a function pointer
 #define JSVAR_DATA_STRING_LEN  8
 #else
@@ -174,6 +174,8 @@ typedef int64_t JsSysTime;
 #define JSPARSE_FUNCTION_SCOPE_NAME JS_HIDDEN_CHAR_STR"sco" // the scope of the function's definition
 #define JSPARSE_FUNCTION_THIS_NAME JS_HIDDEN_CHAR_STR"ths" // the 'this' variable - for bound functions
 #define JSPARSE_FUNCTION_NAME_NAME JS_HIDDEN_CHAR_STR"nam" // for named functions (a = function foo() { foo(); })
+#define JSPARSE_FUNCTION_LINENUMBER_NAME JS_HIDDEN_CHAR_STR"lin" // The line number offset of the function
+#define JS_EVENT_PREFIX "#on"
 
 #define JSPARSE_EXCEPTION_VAR "except" // when exceptions are thrown, they're stored in the root scope
 #define JSPARSE_STACKTRACE_VAR "sTrace" // for errors/exceptions, a stack trace is stored as a string
@@ -317,7 +319,7 @@ size_t strlen(const char *s);
 int strcmp(const char *a, const char *b);
 void *memcpy(void *dst, const void *src, size_t size);
 void *memset(void *dst, int c, size_t size);
-#define RAND_MAX (0xFFFFFFFFU)
+#define RAND_MAX (0x7FFFFFFFU) // needs to be unsigned!
 int rand();
 void srand(unsigned int seed);
 #endif

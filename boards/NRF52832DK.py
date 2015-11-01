@@ -18,7 +18,11 @@ import pinutils;
 info = {
  'name' : "nRF52 Preview Development Kit",
  'link' :  [ "https://www.nordicsemi.com/Products/Bluetooth-Smart-Bluetooth-low-energy/nRF52832" ],
+  # This is the PCA10036
  'default_console' : "EV_SERIAL1",
+ 'default_console_tx' : "D6",
+ 'default_console_rx' : "D8",
+ 'default_console_baudrate' : "9600",
  'variables' : 750, # How many variables are allocated for Espruino to use. RAM will be overflowed if this number is too high and code won't compile.
  'binary_name' : 'espruino_%v_nrf52832.bin',
 };
@@ -35,6 +39,12 @@ chip = {
   'i2c' : 2,
   'adc' : 1,
   'dac' : 0,
+  'saved_code' : {
+    'address' : ((128 - 3) * 4096),
+    'page_size' : 4096,
+    'pages' : 3,
+    'flash_available' : (512 - 124 - 12) # Softdevice uses 31 plages of flash. Each page is 4 kb.
+  },
 };
 
 # left-right, or top-bottom order
@@ -44,14 +54,14 @@ board = {
 };
 
 devices = {
-  'LED_1' : { 'pin' : 'D17' },
-  'LED_2' : { 'pin' : 'D18' },
-  'LED_3' : { 'pin' : 'D19' },
-  'LED_4' : { 'pin' : 'D20' },
-  'BUTTON_1' : { 'pin' : 'D13'},
-  'BUTTON_2' : { 'pin' : 'D14'},
-  'BUTTON_3' : { 'pin' : 'D15'},
-  'BUTTON_4' : { 'pin' : 'D16'},
+  'LED1' : { 'pin' : 'D17' },
+  'LED2' : { 'pin' : 'D18' },
+  'LED3' : { 'pin' : 'D19' },
+  'LED4' : { 'pin' : 'D20' },
+  'BTN1' : { 'pin' : 'D13'},
+  'BTN2' : { 'pin' : 'D14'},
+  'BTN3' : { 'pin' : 'D15'},
+  'BTN4' : { 'pin' : 'D16'},
   'RX_PIN_NUMBER' : { 'pin' : 'D8'},
   'TX_PIN_NUMBER' : { 'pin' : 'D6'},
   'CTS_PIN_NUMBER' : { 'pin' : 'D7'},

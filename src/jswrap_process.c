@@ -64,30 +64,30 @@ Returns an Object containing various pre-defined variables. standard ones are BO
  */
 JsVar *jswrap_process_env() {
   JsVar *obj = jsvNewWithFlags(JSV_OBJECT);
-  jsvUnLock(jsvObjectSetChild(obj, "VERSION", jsvNewFromString(JS_VERSION)));
-  jsvUnLock(jsvObjectSetChild(obj, "BUILD_DATE", jsvNewFromString(__DATE__)));
-  jsvUnLock(jsvObjectSetChild(obj, "BUILD_TIME", jsvNewFromString(__TIME__)));
+  jsvObjectSetChildAndUnLock(obj, "VERSION", jsvNewFromString(JS_VERSION));
+  jsvObjectSetChildAndUnLock(obj, "BUILD_DATE", jsvNewFromString(__DATE__));
+  jsvObjectSetChildAndUnLock(obj, "BUILD_TIME", jsvNewFromString(__TIME__));
 #ifdef GIT_COMMIT
-  jsvUnLock(jsvObjectSetChild(obj, "GIT_COMMIT", jsvNewFromString(STRINGIFY(GIT_COMMIT))));
+  jsvObjectSetChildAndUnLock(obj, "GIT_COMMIT", jsvNewFromString(STRINGIFY(GIT_COMMIT)));
 #endif
-  jsvUnLock(jsvObjectSetChild(obj, "BOARD", jsvNewFromString(PC_BOARD_ID)));
-  jsvUnLock(jsvObjectSetChild(obj, "CHIP", jsvNewFromString(PC_BOARD_CHIP)));
-  jsvUnLock(jsvObjectSetChild(obj, "CHIP_FAMILY", jsvNewFromString(PC_BOARD_CHIP_FAMILY)));
-  jsvUnLock(jsvObjectSetChild(obj, "FLASH", jsvNewFromInteger(FLASH_TOTAL)));
-  jsvUnLock(jsvObjectSetChild(obj, "RAM", jsvNewFromInteger(RAM_TOTAL)));
-  jsvUnLock(jsvObjectSetChild(obj, "SERIAL", jswrap_interface_getSerial()));
-  jsvUnLock(jsvObjectSetChild(obj, "CONSOLE", jsvNewFromString(jshGetDeviceString(jsiGetConsoleDevice()))));
+  jsvObjectSetChildAndUnLock(obj, "BOARD", jsvNewFromString(PC_BOARD_ID));
+  jsvObjectSetChildAndUnLock(obj, "CHIP", jsvNewFromString(PC_BOARD_CHIP));
+  jsvObjectSetChildAndUnLock(obj, "CHIP_FAMILY", jsvNewFromString(PC_BOARD_CHIP_FAMILY));
+  jsvObjectSetChildAndUnLock(obj, "FLASH", jsvNewFromInteger(FLASH_TOTAL));
+  jsvObjectSetChildAndUnLock(obj, "RAM", jsvNewFromInteger(RAM_TOTAL));
+  jsvObjectSetChildAndUnLock(obj, "SERIAL", jswrap_interface_getSerial());
+  jsvObjectSetChildAndUnLock(obj, "CONSOLE", jsvNewFromString(jshGetDeviceString(jsiGetConsoleDevice())));
   JsVar *arr = jsvNewWithFlags(JSV_OBJECT);
   if (arr) {
     const char *s = exportNames;
     void **p = (void**)exportPtrs;
     while (*s) {
-      jsvUnLock(jsvObjectSetChild(arr, s, jsvNewFromInteger((JsVarInt)(size_t)*p)));
+      jsvObjectSetChildAndUnLock(arr, s, jsvNewFromInteger((JsVarInt)(size_t)*p));
       p++;
       while (*s) s++; // skip until 0
       s++; // skip over 0
     }
-    jsvUnLock(jsvObjectSetChild(obj, "EXPORTS", arr));
+    jsvObjectSetChildAndUnLock(obj, "EXPORTS", arr);
   }  
 
   return obj;
@@ -116,8 +116,8 @@ stackEndAddress : (on ARM) the address (that can be used with peek/poke/etc) of 
 Memory units are specified in 'blocks', which are around 16 bytes each (depending on your device). See http://www.espruino.com/Performance for more information.
  */
 #ifdef ARM
-extern int _end; // end of ram used (variables)
-extern int _etext; // end of flash text (binary) section
+extern int LINKER_END_VAR; // end of ram used (variables)
+extern int LINKER_ETEXT_VAR; // end of flash text (binary) section
 #endif
 JsVar *jswrap_process_memory() {
   jsvGarbageCollect();
@@ -131,17 +131,17 @@ JsVar *jswrap_process_memory() {
     }
     unsigned int usage = jsvGetMemoryUsage() - history;
     unsigned int total = jsvGetMemoryTotal();
-    jsvUnLock(jsvObjectSetChild(obj, "free", jsvNewFromInteger((JsVarInt)(total-usage))));
-    jsvUnLock(jsvObjectSetChild(obj, "usage", jsvNewFromInteger((JsVarInt)usage)));
-    jsvUnLock(jsvObjectSetChild(obj, "total", jsvNewFromInteger((JsVarInt)total)));
-    jsvUnLock(jsvObjectSetChild(obj, "history", jsvNewFromInteger((JsVarInt)history)));
+    jsvObjectSetChildAndUnLock(obj, "free", jsvNewFromInteger((JsVarInt)(total-usage)));
+    jsvObjectSetChildAndUnLock(obj, "usage", jsvNewFromInteger((JsVarInt)usage));
+    jsvObjectSetChildAndUnLock(obj, "total", jsvNewFromInteger((JsVarInt)total));
+    jsvObjectSetChildAndUnLock(obj, "history", jsvNewFromInteger((JsVarInt)history));
 
 #ifdef ARM
-    jsvUnLock(jsvObjectSetChild(obj, "stackEndAddress", jsvNewFromInteger((JsVarInt)(unsigned int)&_end)));
-    jsvUnLock(jsvObjectSetChild(obj, "flash_start", jsvNewFromInteger((JsVarInt)FLASH_START)));
-    jsvUnLock(jsvObjectSetChild(obj, "flash_binary_end", jsvNewFromInteger((JsVarInt)(unsigned int)&_etext)));
-    jsvUnLock(jsvObjectSetChild(obj, "flash_code_start", jsvNewFromInteger((JsVarInt)FLASH_SAVED_CODE_START)));
-    jsvUnLock(jsvObjectSetChild(obj, "flash_length", jsvNewFromInteger((JsVarInt)FLASH_TOTAL)));
+    jsvObjectSetChildAndUnLock(obj, "stackEndAddress", jsvNewFromInteger((JsVarInt)(unsigned int)&LINKER_END_VAR));
+    jsvObjectSetChildAndUnLock(obj, "flash_start", jsvNewFromInteger((JsVarInt)FLASH_START));
+    jsvObjectSetChildAndUnLock(obj, "flash_binary_end", jsvNewFromInteger((JsVarInt)(unsigned int)&LINKER_ETEXT_VAR));
+    jsvObjectSetChildAndUnLock(obj, "flash_code_start", jsvNewFromInteger((JsVarInt)FLASH_SAVED_CODE_START));
+    jsvObjectSetChildAndUnLock(obj, "flash_length", jsvNewFromInteger((JsVarInt)FLASH_TOTAL));
 #endif
   }
   return obj;
