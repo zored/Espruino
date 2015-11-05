@@ -2,6 +2,7 @@
  * This file is part of Espruino, a JavaScript interpreter for Microcontrollers
  *
  * Copyright (C) 2014 Gordon Williams <gw@pur3.co.uk>
+ *                    Victor Nakoryakov <victor@amperka.ru>
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -24,9 +25,9 @@
 }*/
 /*JSON{"type" : "variable","name" : "P3",  "generate_full" : "A7_PININDEX",  "return" : ["pin","A Pin"]
 }*/
-/*JSON{"type" : "variable","name" : "P4",  "generate_full" : "B1_PININDEX",  "return" : ["pin","A Pin"]
+/*JSON{"type" : "variable","name" : "P4",  "generate_full" : "C3_PININDEX",  "return" : ["pin","A Pin"]
 }*/
-/*JSON{"type" : "variable","name" : "P5",  "generate_full" : "C3_PININDEX",  "return" : ["pin","A Pin"]
+/*JSON{"type" : "variable","name" : "P5",  "generate_full" : "B1_PININDEX",  "return" : ["pin","A Pin"]
 }*/
 /*JSON{"type" : "variable","name" : "P6",  "generate_full" : "B0_PININDEX",  "return" : ["pin","A Pin"]
 }*/
