@@ -21,6 +21,7 @@ info = {
     'default_console' : "EV_SERIAL2",
     'default_busy_pin_indicator' : "B7",
     'variables' : 5450,
+    'bootloader' : 1,
     'binary_name' : 'espruino_%v_iskrajs.bin',
 }
 
@@ -46,6 +47,7 @@ devices = {
     'OSC' : { 'pin_1' : 'H0',
               'pin_2' : 'H1' },
     'LED1': { 'pin' : 'B6' },
+    'LED2': { 'pin' : 'B7' },
     'BTN1': { 'pin' : 'C4' },
     'USB' : { 'pin_dm' : 'A11',
               'pin_dp' : 'A12',
