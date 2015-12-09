@@ -133,6 +133,8 @@ JsVar *jswrap_url_parse(JsVar *url, bool parseQuery) {
   if (pathStart<0) pathStart = charIdx;
   int addrEnd = (portStart>=0) ? portStart : pathStart;
   // pull out details
+  if (addrStart>0)
+    jsvObjectSetChildAndUnLock(obj, "protocol", jsvNewFromStringVar(url, 0, (size_t)addrStart-1));
   jsvObjectSetChildAndUnLock(obj, "method", jsvNewFromString("GET"));
   jsvObjectSetChildAndUnLock(obj, "host", jsvNewFromStringVar(url, (size_t)(addrStart+1), (size_t)(addrEnd-(addrStart+1))));
 
@@ -148,8 +150,7 @@ JsVar *jswrap_url_parse(JsVar *url, bool parseQuery) {
 
   jsvObjectSetChildAndUnLock(obj, "search", (searchStart>=0)?jsvNewFromStringVar(url, (size_t)searchStart, JSVAPPENDSTRINGVAR_MAXLENGTH):jsvNewNull());
 
-  if (portNumber<=0 || portNumber>65535) portNumber=80;
-  jsvObjectSetChildAndUnLock(obj, "port", jsvNewFromInteger(portNumber));
+  jsvObjectSetChildAndUnLock(obj, "port", (portNumber<=0 || portNumber>65535) ? jsvNewWithFlags(JSV_NULL) : jsvNewFromInteger(portNumber));
 
   JsVar *query = (searchStart>=0)?jsvNewFromStringVar(url, (size_t)(searchStart+1), JSVAPPENDSTRINGVAR_MAXLENGTH):jsvNewNull();
   if (parseQuery && !jsvIsNull(query)) {
@@ -255,6 +256,13 @@ The 'data' event is called when data is received. If a handler is defined with `
 Called when the connection closes.
 */
 /*JSON{
+  "type" : "event",
+  "class" : "Socket",
+  "name" : "error"
+}
+There was an error on this socket and it closed (or wasn't opened in the first place)
+*/
+/*JSON{
   "type" : "method",
   "class" : "Socket",
   "name" : "available",
@@ -355,6 +363,16 @@ JsVar *jswrap_net_connect(JsVar *options, JsVar *callback, SocketType socketType
     jsError("Expecting Options to be an Object but it was %t", options);
     return 0;
   }
+#ifdef USE_TLS
+  if ((socketType&ST_TYPE_MASK) == ST_HTTP) {
+    JsVar *protocol = jsvObjectGetChild(options, "protocol", 0);
+    if (protocol && jsvIsStringEqual(protocol, "https:")) {
+      socketType |= ST_TLS;
+    }
+    jsvUnLock(protocol);
+  }
+#endif
+
   JsVar *skippedCallback = jsvSkipName(callback);
   if (!jsvIsFunction(skippedCallback)) {
     jsError("Expecting Callback Function but got %t", skippedCallback);
@@ -365,7 +383,7 @@ JsVar *jswrap_net_connect(JsVar *options, JsVar *callback, SocketType socketType
   JsVar *rq = clientRequestNew(socketType, options, callback);
   if (unlockOptions) jsvUnLock(options);
 
-  if (socketType!=ST_HTTP) {
+  if ((socketType&ST_TYPE_MASK) != ST_HTTP) {
     JsNetwork net;
     if (networkGetFromVarIfOnline(&net)) {
       clientRequestConnect(&net, rq);
@@ -376,6 +394,57 @@ JsVar *jswrap_net_connect(JsVar *options, JsVar *callback, SocketType socketType
   return rq;
 }
 
+
+// ---------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------
+
+/*JSON{
+  "type" : "library",
+  "class" : "tls",
+  "ifdef" : "USE_TLS"
+}
+This library allows you to create TCPIP servers and clients using TLS encryption
+
+In order to use this, you will need an extra module to get network connectivity.
+
+This is designed to be a cut-down version of the [node.js library](http://nodejs.org/api/tls.html). Please see the [Internet](/Internet) page for more information on how to use it.
+*/
+
+/*JSON{
+  "type" : "staticmethod",
+  "class" : "tls",
+  "name" : "connect",
+  "generate_full" : "jswrap_net_connect(options, callback, ST_NORMAL | ST_TLS)",
+  "params" : [
+    ["options","JsVar","An object containing host,port fields"],
+    ["callback","JsVar","A function(res) that will be called when a connection is made. You can then call `res.on('data', function(data) { ... })` and `res.on('close', function() { ... })` to deal with the response."]
+  ],
+  "return" : ["JsVar","Returns a new net.Socket object"],
+  "return_object" : "Socket",
+  "ifdef" : "USE_TLS"
+}
+Create a socket connection using TLS
+
+Options can have `ca`, `key` and `cert` fields, which should be the decoded content of the certificate.
+
+```
+var options = url.parse("https://localhost");
+options.key = atob("MIIJKQ ... OZs08C");
+options.cert = atob("MIIFi ... Uf93rN+");
+options.ca = atob("MIIFgDCC ... GosQML4sc=");
+require("http").request(options, ... );
+```
+
+If you have the certificates as `.pem` files, you need to load these files, take the
+information between the lines beginning with `----`, remove the newlines from it
+so you have raw base64, and then feed it into `atob` as above.
+
+For more information about generating and using certificates, see:
+
+https://engineering.circle.com/https-authorized-certs-with-node-js/
+*/
 
 // ---------------------------------------------------------------------------------
 // ---------------------------------------------------------------------------------

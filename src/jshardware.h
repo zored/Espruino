@@ -380,7 +380,7 @@ typedef enum {
   JSGPAF_OUTPUT,
 } JshGetPinAddressFlags;
 // Get the address to read/write to in order to change the state of this pin. Or 0.
-uint32_t *jshGetPinAddress(Pin pin, JshGetPinAddressFlags flags);
+volatile uint32_t *jshGetPinAddress(Pin pin, JshGetPinAddressFlags flags);
 #endif
 
 /// the temperature from the internal temperature sensor, in degrees C
@@ -394,7 +394,7 @@ unsigned int jshGetRandomNumber();
 
 /** Hacky definition of wait cycles used for WAIT_UNTIL.
  * TODO: make this depend on known system clock speed? */
-#if defined(STM32F401xx)
+#if defined(STM32F401xx) || defined(STM32F411xx)
 #define WAIT_UNTIL_N_CYCLES 2000000
 #elif defined(STM32F4)
 #define WAIT_UNTIL_N_CYCLES 5000000

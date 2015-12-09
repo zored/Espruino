@@ -130,6 +130,28 @@ and
 
 ----
 
+##wifi.getAPIP
+
+`wifi.getIP()`
+
+Returns an object that contains the details of the current access point IP address.  The object contains:
+
+* `ip` - The current IP address
+* `gw` - The current Gateway address
+* `netmask` - The current Netmask value
+* `mac` - The MAC Address of the access point interface.
+
+Each of these properties are 32 bit integers (4 bytes corresponding to the IP address).  To convert these
+into string dotted decimal format one can use the `ESP8266WiFi.getAddressAsString` function.
+
+For example:
+
+    var wifi = require("wifi");
+    var ipInfo = wifi.getAPIP();
+    print("Wifi AP IP info: " + JSON.stringify(ipInfo));
+
+----
+
 ##wifi.connect
 
 Connect to a named access point.
@@ -229,6 +251,7 @@ Returns an object that contains the details of the current IP address.  The obje
 * `ip` - The current IP address
 * `gw` - The current Gateway address
 * `netmask` - The current Netmask value
+* `mac` - The MAC Address of the station interface.
 
 Each of these properties are 32 bit integers (4 bytes corresponding to the IP address).  To convert these
 into string dotted decimal format one can use the `ESP8266WiFi.getAddressAsString` function.
@@ -247,6 +270,10 @@ Scan for a list of the access points and pass them as an array into a callback f
 
 `wifi.scan(callback)`
 
+The signature for the callback function is:
+
+    callback(err, arrayOfAccessPoints)
+
 The callback function is passed an array of records where each record describes a potential access point.
 Each record contains:
 
@@ -259,11 +286,28 @@ Each record contains:
 For example:
 
     var wifi = require("wifi");
-    wifi.scan(function(arrayOfAcessPoints) {
+    wifi.scan(function(err, arrayOfAcessPoints) {
       for (var i=0; i<arrayOfAcessPoints.length; i++) {
         print("Access point: " + i + " = " + JSON.stringify(arrayOfAcessPoints[i]));
       }
     });
+
+----
+
+##wifi.getSatus
+
+Retrieve the status of the WiFi environment.
+
+`wifi.getStatus()`
+
+This function returns a JavaScript object that contains the current status of the WiFi environment.  Depending
+on the board being used, the results may include the following:
+
+* `isStation` - True if the device is being a Station
+* `isAP` - True if the device is being an Access Point.
+* `connectedStations` - An array of the stations connected to us if we are being an access point.  This
+array may be empty.  Each entry in the array will itself be an object describing the station which,
+at a minimum will contain `ip` being the IP address of the station.
 
 ----
 
