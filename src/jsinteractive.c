@@ -749,12 +749,26 @@ void jsiSemiInit(bool autoLoad) {
 #endif
           // rectangles @ http://www.network-science.de/ascii/
           "\n"
+
+#ifdef ISKRAJS
+          "    ____       __\n"
+          "   /  _/_____ / /__ _____ ____ _\n"
+          "   / / / ___// //_// ___// __ `/\n"
+          " _/ / (__  )/ ,<  / /   / /_/ /\n"
+          "/___//____//_/|_|/_/    \\__,_/\n"
+          "\n"
+          "Based on Espruino " JS_VERSION "\n"
+          "(c) 2016 G.Williams, Amperka LLC\n"
+#else
           " _____                 _ \n"
           "|   __|___ ___ ___ _ _|_|___ ___ \n"
           "|   __|_ -| . |  _| | | |   | . |\n"
           "|_____|___|  _|_| |___|_|_|_|___|\n"
           "          |_| http://espruino.com\n"
-          " "JS_VERSION" Copyright 2015 G.Williams\n");
+          " "JS_VERSION" Copyright 2015 G.Williams\n"
+#endif
+      );
+
 #ifdef ESP8266
 	  jshPrintBanner();
 #endif
