@@ -1,2 +1,2 @@
 #!/bin/bash
-ISKRAJS=1 WIZNET=1 RELEASE=1 make $@
+ISKRAJS=1 RELEASE=1 make $@
