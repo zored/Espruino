@@ -2370,7 +2370,7 @@ void jsiDebuggerLoop() {
   //   in debugger already
   //   echo is off for line (probably uploading)
   if (jsiStatus & (JSIS_IN_DEBUGGER|JSIS_ECHO_OFF_FOR_LINE)) return;
-       
+
   execInfo.execute &= (JsExecFlags)~(
       EXEC_CTRL_C_MASK |
       EXEC_DEBUGGER_NEXT_LINE |
