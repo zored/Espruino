@@ -45,3 +45,28 @@
 }*/
 /*JSON{"type" : "variable","name" : "P13",  "generate_full" : "A10_PININDEX",  "return" : ["pin","A Pin"]
 }*/
+/*JSON{"type" : "variable","name" : "SDA",  "generate_full" : "B9_PININDEX",  "return" : ["pin","A Pin"]
+}*/
+/*JSON{"type" : "variable","name" : "SCL",  "generate_full" : "B8_PININDEX",  "return" : ["pin","A Pin"]
+}*/
+/*JSON{
+  "type": "variable",
+  "name": "PrimaryI2C",
+  "generate_full":
+  "jswFindBuiltInFunction(0, \"I2C1\")", 
+  "return" : ["JsVar","An I2C interface"]
+}*/
+/*JSON{
+  "type": "variable",
+  "name": "PrimarySPI",
+  "generate_full":
+  "jswFindBuiltInFunction(0, \"SPI2\")", 
+  "return" : ["JsVar","An SPI interface"]
+}*/
+/*JSON{
+  "type": "variable",
+  "name": "PrimarySerial",
+  "generate_full":
+  "jswFindBuiltInFunction(0, \"Serial3\")", 
+  "return" : ["JsVar","An USART interface"]
+}*/
