@@ -431,8 +431,6 @@ static JsVarRef _jsiInitNamedArray(const char *name) {
 // Used when recovering after being flashed
 // 'claim' anything we are using
 void jsiSoftInit() {
-  jswInit();
-
   jsErrorFlags = 0;
   events = jsvNewWithFlags(JSV_ARRAY);
   inputLine = jsvNewFromEmptyString();
@@ -442,10 +440,20 @@ void jsiSoftInit() {
   inputLineIterator.var = 0;
 
   jsiStatus &= ~JSIS_ALLOW_DEEP_SLEEP;
+  pinBusyIndicator = DEFAULT_BUSY_PIN_INDICATOR;
+  pinSleepIndicator = DEFAULT_SLEEP_PIN_INDICATOR;
 
   // Load timer/watch arrays
   timerArray = _jsiInitNamedArray(JSI_TIMERS_NAME);
   watchArray = _jsiInitNamedArray(JSI_WATCHES_NAME);
+
+  // Make sure we set up lastIdleTime, as this could be used
+  // when adding an interval from onInit (called below)
+  jsiLastIdleTime = jshGetSystemTime();
+  jsiTimeSinceCtrlC = 0xFFFFFFFF;
+
+  // Runw wrapper initialisation stuff
+  jswInit();
 
   // Now run initialisation code
   JsVar *initCode = jsvObjectGetChild(execInfo.hiddenRoot, JSI_INIT_CODE_NAME, 0);
@@ -472,11 +480,6 @@ void jsiSoftInit() {
 
   // Timers are stored by time in the future now, so no need
   // to fiddle with them.
-
-  // Make sure we set up lastIdleTime, as this could be used
-  // when adding an interval from onInit (called below)
-  jsiLastIdleTime = jshGetSystemTime();
-  jsiTimeSinceCtrlC = 0xFFFFFFFF;
 
   // And look for onInit function
   JsVar *onInit = jsvObjectGetChild(execInfo.root, JSI_ONINIT_NAME, 0);
@@ -759,18 +762,27 @@ void jsiSemiInit(bool autoLoad) {
           "\n"
           "Based on Espruino " JS_VERSION "\n"
           "(c) 2016 G.Williams, Amperka LLC\n"
+          "Support the work of core developers:\n"
+          "http://espruino.com/Donate\n"
 #else
           " _____                 _ \n"
           "|   __|___ ___ ___ _ _|_|___ ___ \n"
           "|   __|_ -| . |  _| | | |   | . |\n"
           "|_____|___|  _|_| |___|_|_|_|___|\n"
           "          |_| http://espruino.com\n"
-          " "JS_VERSION" Copyright 2015 G.Williams\n"
+          " "JS_VERSION" Copyright 2016 G.Williams\n"
+        // Point out about donations - but don't bug people
+        // who bought boards that helped Espruino
+#if !defined(PICO) && !defined(ESPRUINOBOARD)
+          "\n"
+          "Espruino is Open Source. Our work is supported\n"
+          "only by sales of official boards and donations:\n"
+          "http://espruino.com/Donate\n"
 #endif
-      );
-
+#endif
+        );
 #ifdef ESP8266
-	  jshPrintBanner();
+      jshPrintBanner();
 #endif
     }
     jsiConsolePrint("\n"); // output new line
@@ -1103,11 +1115,53 @@ void jsiAppendStringToInputLine(const char *strToAppend) {
   }
 }
 
-#ifndef SAVE_ON_FLASH
+#ifdef USE_TAB_COMPLETE
+
+typedef struct {
+  size_t partialLen;
+  JsVar *partial;
+  JsVar *possible;
+  int matches;
+  size_t lineLength;
+} JsiTabCompleteData;
+
+void jsiTabComplete_findCommon(void *cbdata, JsVar *key) {
+  JsiTabCompleteData *data = (JsiTabCompleteData*)cbdata;
+  if (jsvGetStringLength(key)>data->partialLen && jsvCompareString(data->partial, key, 0, 0, true)==0) {
+    data->matches++;
+    if (data->possible) {
+      JsVar *v = jsvGetCommonCharacters(data->possible, key);
+      jsvUnLock(data->possible);
+      data->possible = v;
+    } else {
+      data->possible = jsvLockAgain(key);
+    }
+  }
+}
+
+void jsiTabComplete_printCommon(void *cbdata, JsVar *key) {
+  JsiTabCompleteData *data = (JsiTabCompleteData*)cbdata;
+  if (jsvGetStringLength(key)>data->partialLen && jsvCompareString(data->partial, key, 0, 0, true)==0) {
+    // Print, but do as 2 columns
+    if (data->lineLength==0 || data->lineLength>18) {
+      jsiConsolePrintf("%v",key);
+      data->lineLength = jsvGetStringLength(key);
+    } else {
+      while (data->lineLength<20) {
+        jsiConsolePrintChar(' ');
+        data->lineLength++;
+      }
+      jsiConsolePrintf("%v\n",key);
+      data->lineLength = 0;
+    }
+  }
+}
+
 void jsiTabComplete() {
   if (!jsvIsString(inputLine)) return;
   JsVar *object = 0;
-  JsVar *partial = 0;
+  JsiTabCompleteData data;
+  data.partial = 0;
   size_t partialStart = 0;
 
   JsLex lex;
@@ -1115,37 +1169,37 @@ void jsiTabComplete() {
   while (lex.tk!=LEX_EOF && jsvStringIteratorGetIndex(&lex.tokenStart.it)<=inputCursorPos) {
     if (lex.tk=='.') {
       jsvUnLock(object);
-      object = partial;
-      partial = 0;
+      object = data.partial;
+      data.partial = 0;
     } else if (lex.tk==LEX_ID) {
-      jsvUnLock(partial);
-      partial = jslGetTokenValueAsVar(&lex);
+      jsvUnLock(data.partial);
+      data.partial = jslGetTokenValueAsVar(&lex);
       partialStart = jsvStringIteratorGetIndex(&lex.tokenStart.it);
     } else {
       jsvUnLock(object);
       object = 0;
-      jsvUnLock(partial);
-      partial = 0;
+      jsvUnLock(data.partial);
+      data.partial = 0;
     }
     jslGetNextToken(&lex);
   }
   jslKill(&lex);
-  if (!partial) {
+  if (!data.partial) {
     jsvUnLock(object);
     return;
   }
-  size_t partialLen = jsvGetStringLength(partial);
+  data.partialLen = jsvGetStringLength(data.partial);
   size_t actualPartialLen = inputCursorPos + 1 - partialStart;
-  if (actualPartialLen > partialLen) {
+  if (actualPartialLen > data.partialLen) {
     // we had a token but were past the end of it when asked
     // to autocomplete ---> no token
-    jsvUnLock(partial);
+    jsvUnLock(data.partial);
     return;
-  } else if (actualPartialLen < partialLen) {
-    JsVar *v = jsvNewFromStringVar(partial, 0, actualPartialLen);
-    jsvUnLock(partial);
-    partial = v;
-    partialLen = actualPartialLen;
+  } else if (actualPartialLen < data.partialLen) {
+    JsVar *v = jsvNewFromStringVar(data.partial, 0, actualPartialLen);
+    jsvUnLock(data.partial);
+    data.partial = v;
+    data.partialLen = actualPartialLen;
   }
 
   // If we had the name of an object here, try and look it up
@@ -1163,7 +1217,7 @@ void jsiTabComplete() {
     object = v;
     // If we couldn't look it up, don't offer any suggestions
     if (!v) {
-      jsvUnLock(partial);
+      jsvUnLock(data.partial);
       return;
     }
   }
@@ -1172,77 +1226,34 @@ void jsiTabComplete() {
     object = jsvLockAgain(execInfo.root);
   }
   // Now try and autocomplete
-  JsVar *possible = 0;
-  JsVar *keys = jswrap_object_keys_or_property_names(object, true, true);
-  //jsiConsolePrintf("\n%v\n", keys);
-  jsvUnLock(object);
-  if (!keys) return;
-  int matches = 0;
-  JsvObjectIterator it;
-  jsvObjectIteratorNew(&it, keys);
-  while (jsvObjectIteratorHasValue(&it)) {
-    JsVar *key = jsvObjectIteratorGetValue(&it);
-    if (jsvGetStringLength(key)>partialLen && jsvCompareString(partial, key, 0, 0, true)==0) {
-      matches++;
-      if (possible) {
-        JsVar *v = jsvGetCommonCharacters(possible, key);
-        jsvUnLock(possible);
-        possible = v;
-      } else {
-        possible = jsvLockAgain(key);
-      }
-    }
-    jsvUnLock(key);
-    jsvObjectIteratorNext(&it);
-  }
-  jsvObjectIteratorFree(&it);
+  data.possible = 0;
+  data.matches = 0;
+  jswrap_object_keys_or_property_names_cb(object, true, true, jsiTabComplete_findCommon, &data);
   // If we've got >1 match and are at the end of a line, print hints
-  if (matches>1) {
+  if (data.matches>1) {
     // Remove the current line and add a newline
     jsiMoveCursorChar(inputLine, inputCursorPos, (size_t)inputLineLength);
     inputLineRemoved = true;
     jsiConsolePrint("\n\n");
-    size_t lineLength = 0;
+    data.lineLength = 0;
     // Output hints
-    JsvObjectIterator it;
-      jsvObjectIteratorNew(&it, keys);
-      while (jsvObjectIteratorHasValue(&it)) {
-        JsVar *key = jsvObjectIteratorGetValue(&it);
-        if (jsvGetStringLength(key)>partialLen && jsvCompareString(partial, key, 0, 0, true)==0) {
-          // Print, but do as 2 columns
-          if (lineLength==0 || lineLength>18) {
-            jsiConsolePrintf("%v",key);
-            lineLength = jsvGetStringLength(key);
-          } else {
-            while (lineLength<20) {
-              jsiConsolePrintChar(' ');
-              lineLength++;
-            }
-            jsiConsolePrintf("%v\n",key);
-            lineLength = 0;
-          }
-        }
-        jsvUnLock(key);
-        jsvObjectIteratorNext(&it);
-      }
-      jsvObjectIteratorFree(&it);
-      if (lineLength) jsiConsolePrint("\n");
-      jsiConsolePrint("\n");
+    jswrap_object_keys_or_property_names_cb(object, true, true, jsiTabComplete_printCommon, &data);
+    if (data.lineLength) jsiConsolePrint("\n");
+    jsiConsolePrint("\n");
     // Return the input line
     jsiConsoleReturnInputLine();
   }
-
-  jsvUnLock(keys);
+  jsvUnLock(object);
   // apply the completion
-  if (possible) {
+  if (data.possible) {
     char buf[JSLEX_MAX_TOKEN_LENGTH];
-    jsvGetString(possible, buf, sizeof(buf));
-    if (partialLen < strlen(buf))
-      jsiAppendStringToInputLine(&buf[partialLen]);
-    jsvUnLock(possible);
+    jsvGetString(data.possible, buf, sizeof(buf));
+    if (data.partialLen < strlen(buf))
+      jsiAppendStringToInputLine(&buf[data.partialLen]);
+    jsvUnLock(data.possible);
   }
 }
-#endif
+#endif // USE_TAB_COMPLETE
 
 void jsiHandleNewLine(bool execute) {
   if (jsiAtEndOfInputLine()) { // at EOL so we need to figure out if we can execute or not
@@ -1431,7 +1442,7 @@ void jsiHandleChar(char ch) {
     } else if (ch == '\r' || ch == '\n') {
       if (ch == '\r') inputState = IS_HAD_R;
       jsiHandleNewLine(true);
-#ifndef SAVE_ON_FLASH
+#ifdef USE_TAB_COMPLETE
     } else if (ch=='\t' && jsiEcho()) {
       jsiTabComplete();
 #endif
@@ -1589,7 +1600,11 @@ bool jsiIsWatchingPin(Pin pin) {
   return isWatched;
 }
 
-void jsiHandleIOEventForUSART(JsVar *usartClass, IOEvent *event) {
+/** Take an event for a UART and handle the chareacters we're getting, potentially
+ * grabbing more characters as well if it's easy. If more character events are
+ * grabbed, the number of extra events (not characters) is returned */
+int jsiHandleIOEventForUSART(JsVar *usartClass, IOEvent *event) {
+  int eventsHandled = 0;
   /* work out byteSize. On STM32 we fake 7 bit, and it's easier to
    * check the options and work out the masking here than it is to
    * do it in the IRQ */
@@ -1615,6 +1630,7 @@ void jsiHandleIOEventForUSART(JsVar *usartClass, IOEvent *event) {
       // look down the stack and see if there is more data
       if (jshIsTopEvent(IOEVENTFLAGS_GETTYPE(event->flags))) {
         jshPopIOEvent(event);
+        eventsHandled++;
         chars = IOEVENTFLAGS_GETCHARS(event->flags);
       } else
         chars = 0;
@@ -1625,6 +1641,7 @@ void jsiHandleIOEventForUSART(JsVar *usartClass, IOEvent *event) {
     jswrap_stream_pushData(usartClass, stringData, true);
     jsvUnLock(stringData);
   }
+  return eventsHandled;
 }
 
 void jsiHandleIOEventForConsole(IOEvent *event) {
@@ -1642,8 +1659,11 @@ void jsiIdle() {
   // Handle hardware-related idle stuff (like checking for pin events)
   bool wasBusy = false;
   IOEvent event;
-  int maxEvents = IOBUFFERMASK+1; // ensure we can't get totally swamped by having more events than we can process
-  while (maxEvents-- && jshPopIOEvent(&event)) {
+  // ensure we can't get totally swamped by having more events than we can process.
+  // Just process what was in the event queue at the start
+  int maxEvents = jshGetEventsUsed();
+
+  while ((maxEvents--)>0 && jshPopIOEvent(&event)) {
     jsiSetBusy(BUSY_INTERACTIVE, true);
     wasBusy = true;
 
@@ -1658,7 +1678,7 @@ void jsiIdle() {
       // ------------------------------------------------------------------------ SERIAL CALLBACK
       JsVar *usartClass = jsvSkipNameAndUnLock(jsiGetClassNameFromDevice(IOEVENTFLAGS_GETTYPE(event.flags)));
       if (jsvIsObject(usartClass)) {
-        jsiHandleIOEventForUSART(usartClass, &event);
+        maxEvents -= jsiHandleIOEventForUSART(usartClass, &event);
       }
       jsvUnLock(usartClass);
     } else if (DEVICE_IS_USART_STATUS(eventType)) {
@@ -1928,8 +1948,9 @@ void jsiIdle() {
   // check for TODOs
   if (jsiStatus&JSIS_TODO_MASK) {
     jsiSetBusy(BUSY_INTERACTIVE, true);
-    if ((jsiStatus&JSIS_TODO_MASK) == JSIS_TODO_RESET) {
-      jsiStatus &= (JsiStatus)~JSIS_TODO_MASK;
+    JsiStatus s = jsiStatus;
+    if ((s&JSIS_TODO_RESET) == JSIS_TODO_RESET) {
+      jsiStatus &= (JsiStatus)~JSIS_TODO_RESET;
       // shut down everything and start up again
       jsiKill();
       jsvKill();
@@ -1937,8 +1958,8 @@ void jsiIdle() {
       jsvInit();
       jsiSemiInit(false); // don't autoload
     }
-    if ((jsiStatus&JSIS_TODO_MASK) == JSIS_TODO_FLASH_SAVE) {
-      jsiStatus &= (JsiStatus)~JSIS_TODO_MASK;
+    if ((s&JSIS_TODO_FLASH_SAVE) == JSIS_TODO_FLASH_SAVE) {
+      jsiStatus &= (JsiStatus)~JSIS_TODO_FLASH_SAVE;
 
       jsvGarbageCollect(); // nice to have everything all tidy!
       jsiSoftKill();
@@ -1950,8 +1971,8 @@ void jsiIdle() {
       jspSoftInit();
       jsiSoftInit();
     }
-    if ((jsiStatus&JSIS_TODO_MASK) == JSIS_TODO_FLASH_LOAD) {
-      jsiStatus &= (JsiStatus)~JSIS_TODO_MASK;
+    if ((s&JSIS_TODO_FLASH_LOAD) == JSIS_TODO_FLASH_LOAD) {
+      jsiStatus &= (JsiStatus)~JSIS_TODO_FLASH_LOAD;
 
       jsiSoftKill();
       jspSoftKill();
@@ -1967,9 +1988,10 @@ void jsiIdle() {
 
   /* if we've been around this loop, there is nothing to do, and
    * we have a spare 10ms then let's do some Garbage Collection
-   * just in case. */
+   * if we think we need to */
   if (loopsIdling==1 &&
-      minTimeUntilNext > jshGetTimeFromMilliseconds(10)) {
+      minTimeUntilNext > jshGetTimeFromMilliseconds(10) &&
+      jsvMoreFreeVariablesThan(JS_VARS_BEFORE_IDLE_GC)) {
     jsiSetBusy(BUSY_INTERACTIVE, true);
     jsvGarbageCollect();
     jsiSetBusy(BUSY_INTERACTIVE, false);

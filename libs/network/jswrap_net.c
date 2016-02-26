@@ -251,16 +251,39 @@ The 'data' event is called when data is received. If a handler is defined with `
 /*JSON{
   "type" : "event",
   "class" : "Socket",
-  "name" : "close"
+  "name" : "close",
+  "params" : [
+    ["had_error","JsVar","A boolean indicating whether the connection had an error (use an error event handler to get error details)."]
+  ]
 }
 Called when the connection closes.
 */
 /*JSON{
   "type" : "event",
   "class" : "Socket",
-  "name" : "error"
+  "name" : "error",
+  "params" : [
+    ["details","JsVar","An error object with an error code (a negative integer) and a message."]
+  ]
 }
-There was an error on this socket and it closed (or wasn't opened in the first place)
+There was an error on this socket and it is closing (or wasn't opened in the first place). If a "connected" event was issued on this socket then the error event is always followed by a close event.
+The error codes are:
+
+* -1: socket closed (this is not really an error and will not cause an error callback)
+* -2: out of memory (typically while allocating a buffer to hold data)
+* -3: timeout
+* -4: no route
+* -5: busy
+* -6: not found (DNS resolution)
+* -7: max sockets (... exceeded)
+* -8: unsent data (some data could not be sent)
+* -9: connection reset (or refused)
+* -10: unknown error
+* -11: no connection
+* -12: bad argument
+* -13: SSL handshake failed
+* -14: invalid SSL data
+
 */
 /*JSON{
   "type" : "method",
@@ -301,7 +324,7 @@ Pipe this to a stream (an object with a 'write' method)
   "class" : "Socket",
   "name" : "drain"
 }
-An event that is fired when the buffer is empty and it can accept more data to send. 
+An event that is fired when the buffer is empty and it can accept more data to send.
 */
 
 
@@ -346,7 +369,7 @@ JsVar *jswrap_net_createServer(JsVar *callback) {
   "generate_full" : "jswrap_net_connect(options, callback, ST_NORMAL)",
   "params" : [
     ["options","JsVar","An object containing host,port fields"],
-    ["callback","JsVar","A function(res) that will be called when a connection is made. You can then call `res.on('data', function(data) { ... })` and `res.on('close', function() { ... })` to deal with the response."]
+    ["callback","JsVar","A `function(sckt)` that will be called  with the socket when a connection is made. You can then call `sckt.write(...)` to send data, and `sckt.on('data', function(data) { ... })` and `sckt.on('close', function() { ... })` to deal with the response."]
   ],
   "return" : ["JsVar","Returns a new net.Socket object"],
   "return_object" : "Socket"
@@ -373,13 +396,12 @@ JsVar *jswrap_net_connect(JsVar *options, JsVar *callback, SocketType socketType
   }
 #endif
 
-  JsVar *skippedCallback = jsvSkipName(callback);
-  if (!jsvIsFunction(skippedCallback)) {
-    jsError("Expecting Callback Function but got %t", skippedCallback);
-    jsvUnLock(skippedCallback);
+  // Make sure we have a function as callback, or nothing (which is OK too)
+  if (!jsvIsUndefined(callback) && !jsvIsFunction(callback)) {
+    jsError("Expecting Callback Function but got %t", callback);
     return 0;
   }
-  jsvUnLock(skippedCallback);
+
   JsVar *rq = clientRequestNew(socketType, options, callback);
   if (unlockOptions) jsvUnLock(options);
 
@@ -430,16 +452,18 @@ Create a socket connection using TLS
 Options can have `ca`, `key` and `cert` fields, which should be the decoded content of the certificate.
 
 ```
-var options = url.parse("https://localhost");
+var options = url.parse("localhost:1234");
 options.key = atob("MIIJKQ ... OZs08C");
 options.cert = atob("MIIFi ... Uf93rN+");
 options.ca = atob("MIIFgDCC ... GosQML4sc=");
-require("http").request(options, ... );
+require("tls").connect(options, ... );
 ```
 
-If you have the certificates as `.pem` files, you need to load these files, take the
-information between the lines beginning with `----`, remove the newlines from it
-so you have raw base64, and then feed it into `atob` as above.
+If you have the certificates as `.pem` files, you need to load these files, take the information between the lines beginning with `----`, remove the newlines from it so you have raw base64, and then feed it into `atob` as above.
+
+You can also:
+* Just specify the filename (<=100 characters) and it will be loaded and parsed if you have an SD card connected. For instance `options.key = "key.pem";`
+* Specify a function, which will be called to retrieve the data.  For instance `options.key = function() { eeprom.load_my_info(); };
 
 For more information about generating and using certificates, see:
 

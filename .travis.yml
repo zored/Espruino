@@ -47,6 +47,7 @@ env:
     - ESP8266_BOARD=1
     - ESPRUINO_1V3=1
     - PICO_1V3=1
+    - MICROBIT=1
     - OLIMEXINO_STM32=1
     - MAPLERET6_STM32=1
     - HYSTM32_24=1
@@ -59,6 +60,7 @@ env:
     - NUCLEOF411RE=1
     - LCTECH_STM32F103RBT6=1
     - LINUX_BUILD=1
+    - EFM32GGSTK=1
 script: make
 
 notifications:

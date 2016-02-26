@@ -12,12 +12,7 @@
 # -----------------------------------------------------------------------------
 # Set ONE of the following environment variables to compile for that board:
 #
-# ESPRUINO_1V0=1          # Espruino board rev 1.0
-# ESPRUINO_1V1=1          # Espruino board rev 1.1 and 1.2
 # ESPRUINO_1V3=1          # Espruino board rev 1.3 and rev 1v4
-# PICO_1V0=1              # Espruino Pico board rev 1.0
-# PICO_1V1=1              # Espruino Pico board rev 1.1
-# PICO_1V2=1              # Espruino Pico board rev 1.2
 # PICO_1V3=1              # Espruino Pico board rev 1.3
 # OLIMEXINO_STM32=1       # Olimexino STM32
 # MAPLERET6_STM32=1       # Limited production Leaflabs Maple r5 with a STM32F103RET6
@@ -37,7 +32,7 @@
 # NRF51822DK=1
 # NRF52832DK=1            # Ultra low power BLE (bluetooth low energy) enabled SoC. Arm Cortex-M4f processor. With NFC (near field communication).
 # CARAMBOLA=1
-# DPTBOARD=1              # DPTechnics IoT development board with BlueCherry.io IoT platform integration and DPT-WEB IDE.	
+# DPTBOARD=1              # DPTechnics IoT development board with BlueCherry.io IoT platform integration and DPT-WEB IDE.
 # RASPBERRYPI=1
 # BEAGLEBONE=1
 # ARIETTA=1
@@ -50,9 +45,9 @@
 # MINISTM32_ANGLED_VE=1
 # MINISTM32_ANGLED_VG=1
 # ISKRAJS=1
-# ESP8266_BOARD=1         # Same as ESP8266_512KB
-# EMW3165                 # MXCHIP EMW3165: STM32F411CE, BCM43362, 512KB flash 128KB RAM
-#
+# ESP8266_BOARD=1         # ESP8266
+# EFM32GGSTK=1            # Currently only works with DEBUG=1
+# EMW3165=1               # MXCHIP EMW3165: STM32F411CE, BCM43362, 512KB flash 128KB RAM
 # Or nothing for standard linux compile
 #
 # Also:
@@ -88,6 +83,9 @@ USE_MATH=1
 ifeq ($(shell uname),Darwin)
 MACOSX=1
 CFLAGS+=-D__MACOSX__
+STAT_FLAGS='-f ''%z'''
+else
+STAT_FLAGS='-c ''%s'''
 endif
 
 ifeq ($(OS),Windows_NT)
@@ -168,6 +166,12 @@ USE_TLS=1
 BOARD=PICO_R1_3
 STLIB=STM32F401xE
 PRECOMPILED_OBJS+=$(ROOT)/targetlibs/stm32f4/lib/startup_stm32f401xx.o
+OPTIMIZEFLAGS+=-Os
+
+else ifdef EFM32GGSTK
+EMBEDDED=1
+DEFINES+= -DEFM32GG890F1024=1 # This should be EFM32GG990F1024, temporary hack to avoid the #USB on line 772 in jsinteractive.c
+BOARD=EFM32GGSTK
 OPTIMIZEFLAGS+=-Os
 
 else ifdef OLIMEXINO_STM32
@@ -388,7 +392,7 @@ USE_GRAPHICS=1
 BOARD=STM32F3DISCOVERY
 STLIB=STM32F3XX
 PRECOMPILED_OBJS+=$(ROOT)/targetlibs/stm32f3/lib/startup_stm32f30x.o
-OPTIMIZEFLAGS+=-O3
+OPTIMIZEFLAGS+=-Os
 
 else ifdef STM32VLDISCOVERY
 EMBEDDED=1
@@ -401,7 +405,19 @@ OPTIMIZEFLAGS+=-Os # short on program memory
 else ifdef MICROBIT
 EMBEDDED=1
 SAVE_ON_FLASH=1
+# Save on flash, but we still want the debugger and tab complete
+DEFINES+=-DUSE_DEBUGGER -DUSE_TAB_COMPLETE
 BOARD=MICROBIT
+OPTIMIZEFLAGS+=-Os
+USE_BLUETOOTH=1
+USE_GRAPHICS=1
+
+else ifdef DO003
+EMBEDDED=1
+SAVE_ON_FLASH=1
+# Save on flash, but we still want the debugger and tab complete
+DEFINES+=-DUSE_DEBUGGER -DUSE_TAB_COMPLETE
+BOARD=DO-003
 OPTIMIZEFLAGS+=-Os
 USE_BLUETOOTH=1
 USE_GRAPHICS=1
@@ -409,6 +425,8 @@ USE_GRAPHICS=1
 else ifdef NRF51TAG
 EMBEDDED=1
 SAVE_ON_FLASH=1
+# Save on flash, but we still want the debugger and tab complete
+DEFINES+=-DUSE_DEBUGGER -DUSE_TAB_COMPLETE
 BOARD=NRF51TAG
 OPTIMIZEFLAGS+=-Os
 USE_BLUETOOTH=1
@@ -416,15 +434,19 @@ USE_BLUETOOTH=1
 else ifdef NRF51822DK
 EMBEDDED=1
 SAVE_ON_FLASH=1
+# Save on flash, but we still want the debugger and tab complete
+DEFINES+=-DUSE_DEBUGGER -DUSE_TAB_COMPLETE
 BOARD=NRF51822DK
 OPTIMIZEFLAGS+=-Os
 USE_BLUETOOTH=1
+DEFINES += -DBOARD_PCA10028
 
 else ifdef NRF52832DK
 EMBEDDED=1
 BOARD=NRF52832DK
 OPTIMIZEFLAGS+=-O3
 USE_BLUETOOTH=1
+DEFINES += -DBOARD_PCA10040
 
 else ifdef LPC1768
 EMBEDDED=1
@@ -457,6 +479,14 @@ STLIB=STM32F10X_HD
 PRECOMPILED_OBJS+=$(ROOT)/targetlibs/stm32f1/lib/startup_stm32f10x_hd.o
 OPTIMIZEFLAGS+=-O3
 
+else ifdef LCTECH_STM32F103RBT6
+EMBEDDED=1
+SAVE_ON_FLASH=1
+BOARD=LCTECH_STM32F103RBT6
+STLIB=STM32F10X_MD
+PRECOMPILED_OBJS+=$(ROOT)/targetlibs/stm32f1/lib/startup_stm32f10x_md.o
+OPTIMIZEFLAGS+=-Os
+
 else ifdef CARAMBOLA
 EMBEDDED=1
 BOARD=CARAMBOLA
@@ -465,6 +495,8 @@ LINUX=1
 USE_FILESYSTEM=1
 USE_GRAPHICS=1
 USE_NET=1
+USE_CRYPTO=1
+USE_TLS=1
 
 else ifdef DPTBOARD
 EMBEDDED=1
@@ -477,24 +509,20 @@ USE_FILESYSTEM=1
 USE_GRAPHICS=1
 USE_NET=1
 
-else ifdef LCTECH_STM32F103RBT6
-EMBEDDED=1
-SAVE_ON_FLASH=1
-BOARD=LCTECH_STM32F103RBT6
-STLIB=STM32F10X_MD
-PRECOMPILED_OBJS+=$(ROOT)/targetlibs/stm32f1/lib/startup_stm32f10x_md.o
-OPTIMIZEFLAGS+=-Os
 
 else ifdef ESP8266_BOARD
 EMBEDDED=1
 USE_NET=1
+USE_TELNET=1
+#USE_GRAPHICS=1
 BOARD=ESP8266_BOARD
-# Enable link-time optimisations (inlining across files) but don't go beyond -O2 'cause of
-# code size explosion, also -DLINK_TIME_OPTIMISATION leads to too big a firmware
+# Enable link-time optimisations (inlining across files), use -Os 'cause else we end up with
+# too large a firmware (-Os is -O2 without optimizations that increase code size)
 ifndef DISABLE_LTO
 OPTIMIZEFLAGS+=-Os -std=gnu11 -fgnu89-inline -flto -fno-fat-lto-objects -Wl,--allow-multiple-definition
+#OPTIMIZEFLAGS+=-DLINK_TIME_OPTIMISATION # this actually slows things down!
 else
-# DISABLE_LTO is necessary in order to analyze static string sizes (topstring makefile target)
+# DISABLE_LTO is necessary in order to analyze static string sizes (see: topstring makefile target)
 OPTIMIZEFLAGS+=-Os -std=gnu11 -fgnu89-inline -Wl,--allow-multiple-definition
 endif
 ESP_FLASH_MAX       ?= 491520   # max bin file: 480KB
@@ -545,7 +573,7 @@ endif
 ifdef RASPBERRYPI
 EMBEDDED=1
 BOARD=RASPBERRYPI
-DEFINES += -DRASPBERRYPI 
+DEFINES += -DRASPBERRYPI
 LINUX=1
 USE_FILESYSTEM=1
 USE_GRAPHICS=1
@@ -594,6 +622,7 @@ USE_HASHLIB=1
 USE_GRAPHICS=1
 USE_CRYPTO=1
 USE_TLS=1
+#USE_TELNET=1  # enable telnet to have it listen on port 2323 as JS console
 #USE_LCD_SDL=1
 
 ifdef MACOSX
@@ -659,11 +688,14 @@ endif
 
 ifdef DEBUG
 #OPTIMIZEFLAGS=-Os -g
-ifeq ($(FAMILY),ESP8266)
-OPTIMIZEFLAGS=-g -Os
-else
-OPTIMIZEFLAGS=-g
-endif
+ ifeq ($(FAMILY),ESP8266)
+  OPTIMIZEFLAGS=-g -Os
+ else
+  OPTIMIZEFLAGS=-g
+ endif
+ ifdef EFM32
+  DEFINES += -DDEBUG_EFM=1 -DDEBUG=1
+ endif
 DEFINES+=-DDEBUG
 endif
 
@@ -725,6 +757,7 @@ ifdef CPPFILE
 CPPSOURCES += $(CPPFILE)
 endif
 
+
 ifdef BOOTLOADER
 ifndef USE_BOOTLOADER
 $(error Using bootloader on device that is not expecting one)
@@ -758,9 +791,26 @@ endif
 
 ifdef SAVE_ON_FLASH
 DEFINES+=-DSAVE_ON_FLASH
+
+# Smaller, RLE compression for code
+INCLUDE += -I$(ROOT)/libs/compression -I$(ROOT)/libs/compression
+SOURCES += \
+libs/compression/compress_rle.c
+
 else
 # If we have enough flash, include the debugger
 DEFINES+=-DUSE_DEBUGGER
+# Use use tab complete
+DEFINES+=-DUSE_TAB_COMPLETE
+
+# Heatshrink compression library and wrapper - better compression when saving code to flash
+DEFINES+=-DUSE_HEATSHRINK
+INCLUDE += -I$(ROOT)/libs/compression -I$(ROOT)/libs/compression/heatshrink
+SOURCES += \
+libs/compression/heatshrink/heatshrink_encoder.c \
+libs/compression/heatshrink/heatshrink_decoder.c \
+libs/compression/compress_heatshrink.c
+
 endif
 
 ifndef BOOTLOADER # ------------------------------------------------------------------------------ DON'T USE IN BOOTLOADER
@@ -867,20 +917,20 @@ DEFINES += -DUSE_USB_HID
 endif
 
 ifdef USE_NET
-DEFINES += -DUSE_NET
-INCLUDE += -I$(ROOT)/libs/network -I$(ROOT)/libs/network -I$(ROOT)/libs/network/http
-WRAPPERSOURCES += \
-libs/network/jswrap_net.c \
-libs/network/http/jswrap_http.c
-SOURCES += \
-libs/network/network.c \
-libs/network/socketserver.c
+ DEFINES += -DUSE_NET
+ INCLUDE += -I$(ROOT)/libs/network -I$(ROOT)/libs/network -I$(ROOT)/libs/network/http
+ WRAPPERSOURCES += \
+ libs/network/jswrap_net.c \
+ libs/network/http/jswrap_http.c
+ SOURCES += \
+ libs/network/network.c \
+ libs/network/socketserver.c \
+ libs/network/socketerrors.c
 
-# 
-WRAPPERSOURCES += libs/network/js/jswrap_jsnetwork.c
-INCLUDE += -I$(ROOT)/libs/network/js
-SOURCES += \
-libs/network/js/network_js.c
+ WRAPPERSOURCES += libs/network/js/jswrap_jsnetwork.c
+ INCLUDE += -I$(ROOT)/libs/network/js
+ SOURCES += \
+ libs/network/js/network_js.c
 
  ifdef LINUX
  INCLUDE += -I$(ROOT)/libs/network/linux
@@ -943,13 +993,21 @@ libs/network/js/network_js.c
  ifdef USE_ESP8266
  DEFINES += -DUSE_ESP8266
  WRAPPERSOURCES += libs/network/esp8266/jswrap_esp8266_network.c \
-   targets/esp8266/jswrap_esp8266.c
+   targets/esp8266/jswrap_esp8266.c \
+   targets/esp8266/jswrap_nodemcu.c
  INCLUDE += -I$(ROOT)/libs/network/esp8266
  SOURCES += \
  libs/network/esp8266/network_esp8266.c\
+ libs/network/esp8266/pktbuf.c\
  libs/network/esp8266/ota.c
  endif
-endif
+
+ ifdef USE_TELNET
+ DEFINES += -DUSE_TELNET
+ WRAPPERSOURCES += libs/network/telnet/jswrap_telnet.c
+ INCLUDE += -I$(ROOT)/libs/network/telnet
+ endif
+endif # USE_NET
 
 ifdef USE_TV
 DEFINES += -DUSE_TV
@@ -978,7 +1036,7 @@ endif
 ifdef USE_WIRINGPI
 DEFINES += -DUSE_WIRINGPI
 LIBS += -lwiringPi
-INCLUDE += -I/usr/local/include -L/usr/local/lib 
+INCLUDE += -I/usr/local/include -L/usr/local/lib
 endif
 
 ifdef USE_BLUETOOTH
@@ -1079,11 +1137,11 @@ targetlibs/stm32f1/lib/stm32f10x_tim.c     \
 targetlibs/stm32f1/lib/stm32f10x_usart.c   \
 targetlibs/stm32f1/lib/stm32f10x_wwdg.c    \
 targetlibs/stm32f1/lib/system_stm32f10x.c
-    
-#targetlibs/stm32f1/lib/stm32f10x_cec.c     
-#targetlibs/stm32f1/lib/stm32f10x_crc.c     
-#targetlibs/stm32f1/lib/stm32f10x_dbgmcu.c  
-#targetlibs/stm32f1/lib/stm32f10x_fsmc.c    
+
+#targetlibs/stm32f1/lib/stm32f10x_cec.c
+#targetlibs/stm32f1/lib/stm32f10x_crc.c
+#targetlibs/stm32f1/lib/stm32f10x_dbgmcu.c
+#targetlibs/stm32f1/lib/stm32f10x_fsmc.c
 
 ifdef USB
 STM32_LEGACY_USB=1
@@ -1141,7 +1199,7 @@ ifdef WICED_XXX
   DEFINES += -DNETWORK_LwIP=1 -DLwIP_VERSION=\"v1.4.0.rc1\"
   DEFINES += -DRTOS_FreeRTOS=1 -DconfigUSE_MUTEXES -DconfigUSE_RECURSIVE_MUTEXES
   DEFINES += -DFreeRTOS_VERSION=\"v7.5.2\" -DWWD_DIRECT_RESOURCES -DHSE_VALUE=26000000
-  INCLUDE += 
+  INCLUDE +=
 endif
 STM32=1
 INCLUDE += -I$(ROOT)/targetlibs/stm32f4 -I$(ROOT)/targetlibs/stm32f4/lib
@@ -1167,19 +1225,19 @@ targetlibs/stm32f4/lib/stm32f4xx_tim.c        \
 targetlibs/stm32f4/lib/stm32f4xx_usart.c      \
 targetlibs/stm32f4/lib/stm32f4xx_wwdg.c       \
 targetlibs/stm32f4/lib/system_stm32f4xx.c
-#targetlibs/stm32f4/lib/stm32f4xx_cryp_aes.c  
-#targetlibs/stm32f4/lib/stm32f4xx_dcmi.c       
-#targetlibs/stm32f4/lib/stm32f4xx_dma2d.c      
-#targetlibs/stm32f4/lib/stm32f4xx_can.c        
-#targetlibs/stm32f4/lib/stm32f4xx_cryp_des.c  
-#targetlibs/stm32f4/lib/stm32f4xx_cryp_tdes.c  
-#targetlibs/stm32f4/lib/stm32f4xx_cryp.c       
-#targetlibs/stm32f4/lib/stm32f4xx_hash.c       
-#targetlibs/stm32f4/lib/stm32f4xx_hash_md5.c   
-#targetlibs/stm32f4/lib/stm32f4xx_hash_sha1.c  
-#targetlibs/stm32f4/lib/stm32f4xx_ltdc.c       
-#targetlibs/stm32f4/lib/stm32f4xx_rng.c        
-#targetlibs/stm32f4/lib/stm32f4xx_sai.c        
+#targetlibs/stm32f4/lib/stm32f4xx_cryp_aes.c
+#targetlibs/stm32f4/lib/stm32f4xx_dcmi.c
+#targetlibs/stm32f4/lib/stm32f4xx_dma2d.c
+#targetlibs/stm32f4/lib/stm32f4xx_can.c
+#targetlibs/stm32f4/lib/stm32f4xx_cryp_des.c
+#targetlibs/stm32f4/lib/stm32f4xx_cryp_tdes.c
+#targetlibs/stm32f4/lib/stm32f4xx_cryp.c
+#targetlibs/stm32f4/lib/stm32f4xx_hash.c
+#targetlibs/stm32f4/lib/stm32f4xx_hash_md5.c
+#targetlibs/stm32f4/lib/stm32f4xx_hash_sha1.c
+#targetlibs/stm32f4/lib/stm32f4xx_ltdc.c
+#targetlibs/stm32f4/lib/stm32f4xx_rng.c
+#targetlibs/stm32f4/lib/stm32f4xx_sai.c
 #targetlibs/stm32f4/lib/stm324xx_fsmc.c
 ifdef USB
 STM32_USB=1
@@ -1193,7 +1251,7 @@ ifdef STM32_USB
 SOURCES +=                                 \
 targetlibs/stm32usb/Src/stm32f4xx_ll_usb.c \
 targetlibs/stm32usb/Src/stm32f4xx_hal_pcd.c \
-targetlibs/stm32usb/Src/stm32f4xx_hal_pcd_ex.c 
+targetlibs/stm32usb/Src/stm32f4xx_hal_pcd_ex.c
 
 INCLUDE += -I$(ROOT)/targetlibs/stm32usb -I$(ROOT)/targetlibs/stm32usb/Inc
 SOURCES +=                                 \
@@ -1233,66 +1291,139 @@ targetlibs/stm32legacyusb/legacy_usb.c
 endif #USB
 
 ifeq ($(FAMILY), NRF51)
-  
+
   NRF5X=1
-  NRF5X_SDK_PATH=$(ROOT)/targetlibs/nrf5x/nrf51_sdk
+  NRF5X_SDK_PATH=$(ROOT)/targetlibs/nrf5x/nrf5_sdk
   
   # ARCHFLAGS are shared by both CFLAGS and LDFLAGS.
   ARCHFLAGS = -mcpu=cortex-m0 -mthumb -mabi=aapcs -mfloat-abi=soft # Use nRF51 makefiles provided in SDK as reference.
- 
-  # nRF51 specific. Main differences in SDK structure are softdevice, uart, delay...
-  INCLUDE += -I$(NRF5X_SDK_PATH)/components/softdevice/s110/headers
-  SOURCES += $(NRF5X_SDK_PATH)/components/toolchain/system_nrf51.c \
-  $(NRF5X_SDK_PATH)/components/drivers_nrf/uart/app_uart_fifo.c
 
-  PRECOMPILED_OBJS+=$(NRF5X_SDK_PATH)/components/toolchain/gcc/gcc_startup_nrf51.o
+  # nRF51 specific.
+  INCLUDE          += -I$(NRF5X_SDK_PATH)/../nrf51_config
+  INCLUDE          += -I$(NRF5X_SDK_PATH)/components/softdevice/s130/headers
+  INCLUDE          += -I$(NRF5X_SDK_PATH)/components/softdevice/s130/headers/nrf51
+  SOURCES          += $(NRF5X_SDK_PATH)/components/toolchain/system_nrf51.c
+  PRECOMPILED_OBJS += $(NRF5X_SDK_PATH)/components/toolchain/gcc/gcc_startup_nrf51.o
 
-  DEFINES += -DNRF51 -DSWI_DISABLE0 -DSOFTDEVICE_PRESENT -DS110 -DBLE_STACK_SUPPORT_REQD # SoftDevice included by default.
+  DEFINES += -DNRF51 -DSWI_DISABLE0 -DSOFTDEVICE_PRESENT -DS130 -DBLE_STACK_SUPPORT_REQD -DNRF_LOG_USES_UART # SoftDevice included by default.
 
   LINKER_RAM:=$(shell python scripts/get_board_info.py $(BOARD) "board.chip['ram']")
-  LINKER_FILE = $(NRF5X_SDK_PATH)/components/toolchain/gcc/linker_nrf51_ble_espruino_$(LINKER_RAM).ld
+
+  LINKER_FILE = $(NRF5X_SDK_PATH)/../nrf5x_linkers/linker_nrf51_ble_espruino_$(LINKER_RAM).ld
   
-  SOFTDEVICE = targetlibs/nrf5x/softdevice/s110_nrf51_8.0.0_softdevice.hex
+  SOFTDEVICE = $(NRF5X_SDK_PATH)/components/softdevice/s130/hex/s130_nrf51_2.0.0-7.alpha_softdevice.hex
 
 endif # FAMILY == NRF51
 
 ifeq ($(FAMILY), NRF52)
-  
+
   NRF5X=1
-  NRF5X_SDK_PATH=$(ROOT)/targetlibs/nrf5x/nrf52_sdk
+  NRF5X_SDK_PATH=$(ROOT)/targetlibs/nrf5x/nrf5_sdk
 
   # ARCHFLAGS are shared by both CFLAGS and LDFLAGS.
   ARCHFLAGS = -mcpu=cortex-m4 -mthumb -mabi=aapcs -mfloat-abi=hard -mfpu=fpv4-sp-d16 # Use nRF52 makefiles provided in SDK as reference.
  
-  # nRF52 specific... Different structure from nRF51 SDK for both delay and uart.
-  INCLUDE += -I$(NRF5X_SDK_PATH)/components/softdevice/s132/headers
-  INCLUDE += -I$(NRF5X_SDK_PATH)/components/softdevice/s132/headers/nrf52
-  INCLUDE += -I$(NRF5X_SDK_PATH)/components/drivers_nrf/delay # this directory doesnt exist in nRF51 SDK.
-  SOURCES += $(NRF5X_SDK_PATH)/components/toolchain/system_nrf52.c \
-  $(NRF5X_SDK_PATH)/components/drivers_nrf/delay/nrf_delay.c \
-  $(NRF5X_SDK_PATH)/components/drivers_nrf/uart/nrf_drv_uart.c \
-  $(NRF5X_SDK_PATH)/components/libraries/uart/app_uart_fifo.c
+  # nRF52 specific.
+  INCLUDE          += -I$(NRF5X_SDK_PATH)/../nrf52_config
+  INCLUDE          += -I$(NRF5X_SDK_PATH)/components/softdevice/s132/headers
+  INCLUDE          += -I$(NRF5X_SDK_PATH)/components/softdevice/s132/headers/nrf52
+  SOURCES          += $(NRF5X_SDK_PATH)/components/toolchain/system_nrf52.c
+  PRECOMPILED_OBJS += $(NRF5X_SDK_PATH)/components/toolchain/gcc/gcc_startup_nrf52.o
 
-  PRECOMPILED_OBJS+=$(NRF5X_SDK_PATH)/components/toolchain/gcc/gcc_startup_nrf52.o
+  DEFINES += -DSWI_DISABLE0 -DSOFTDEVICE_PRESENT -DNRF52 -DCONFIG_GPIO_AS_PINRESET -DS132 -DBLE_STACK_SUPPORT_REQD -DNRF_LOG_USES_UART
+  LINKER_FILE = $(NRF5X_SDK_PATH)/../nrf5x_linkers/linker_nrf52_ble_espruino.ld
 
-  DEFINES += -DSWI_DISABLE0 -DSOFTDEVICE_PRESENT -DNRF52 -DBOARD_PCA10036 -DCONFIG_GPIO_AS_PINRESET -DS132 -DBLE_STACK_SUPPORT_REQD
-  LINKER_FILE = $(NRF5X_SDK_PATH)/components/toolchain/gcc/linker_nrf52_ble_espruino.ld
-
-  SOFTDEVICE = targetlibs/nrf5x/softdevice/s132_nrf52_1.0.0-3.alpha_softdevice.hex
+  SOFTDEVICE = $(NRF5X_SDK_PATH)/components/softdevice/s132/hex/s132_nrf52_2.0.0-7.alpha_softdevice.hex
 
 endif #FAMILY == NRF52
 
+ifeq ($(FAMILY), EFM32GG)
+
+  EFM32=1
+
+  ARCHFLAGS += -mcpu=cortex-m3  -mthumb
+
+  GECKO_SDK_PATH=$(ROOT)/targetlibs/Gecko_SDK
+
+  ARM = 1
+  ARM_HAS_OWN_CMSIS = 1
+  INCLUDE += -I$(GECKO_SDK_PATH)/cmsis/Include
+
+  LINKER_FILE = $(GECKO_SDK_PATH)/Device/SiliconLabs/EFM32GG/Source/GCC/efm32gg.ld
+
+  INCLUDE += -I$(ROOT)/targets/efm32
+  SOURCES +=                              \
+  targets/efm32/main.c                    \
+  targets/efm32/jshardware.c
+
+  INCLUDE += -I$(GECKO_SDK_PATH)/Device/SiliconLabs/EFM32GG/Include
+  INCLUDE += -I$(GECKO_SDK_PATH)/emdrv/gpiointerrupt/inc
+#  INCLUDE += -I$(GECKO_SDK_PATH)/emdrv/ustimer/inc
+  INCLUDE += -I$(GECKO_SDK_PATH)/emdrv/rtcdrv/inc
+  INCLUDE += -I$(GECKO_SDK_PATH)/emdrv/nvm/inc
+  INCLUDE += -I$(GECKO_SDK_PATH)/emdrv/common/inc
+  INCLUDE += -I$(GECKO_SDK_PATH)/emlib/inc
+
+  SOURCES += \
+	$(GECKO_SDK_PATH)/Device/SiliconLabs/EFM32GG/Source/GCC/startup_efm32gg.c \
+	$(GECKO_SDK_PATH)/Device/SiliconLabs/EFM32GG/Source/system_efm32gg.c \
+	$(GECKO_SDK_PATH)/emlib/src/em_gpio.c \
+	$(GECKO_SDK_PATH)/emlib/src/em_cmu.c \
+	$(GECKO_SDK_PATH)/emlib/src/em_assert.c \
+	$(GECKO_SDK_PATH)/emlib/src/em_emu.c \
+	$(GECKO_SDK_PATH)/emlib/src/em_msc.c \
+	$(GECKO_SDK_PATH)/emlib/src/em_rtc.c \
+	$(GECKO_SDK_PATH)/emlib/src/em_int.c \
+	$(GECKO_SDK_PATH)/emlib/src/em_system.c \
+	$(GECKO_SDK_PATH)/emlib/src/em_timer.c \
+	$(GECKO_SDK_PATH)/emlib/src/em_usart.c \
+	$(GECKO_SDK_PATH)/emdrv/gpiointerrupt/src/gpiointerrupt.c \
+	$(GECKO_SDK_PATH)/emdrv/rtcdrv/src/rtcdriver.c \
+	$(GECKO_SDK_PATH)/emdrv/nvm/src/nvm_hal.c
+#	$(GECKO_SDK_PATH)/emdrv/ustimer/src/ustimer.c
+
+	# $(GECKO_SDK_PATH)/emdrv/nvm/src/nvm.c \
+	# $(GECKO_SDK_PATH)/emdrv/nvm/src/nvm_hal.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_acmp.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_adc.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_aes.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_burtc.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_crc.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_cryotimer.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_crypto.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_dac.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_dbg.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_dma.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_ebi.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_i2c.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_idac.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_lcd.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_ldma.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_lesense.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_letimer.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_leuart.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_mpu.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_opamp.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_pcnt.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_prs.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_rmu.c \
+  # $(GECKO_SDK_PATH)/emlib/src/em_rtcc.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_vcmp.c \
+	# $(GECKO_SDK_PATH)/emlib/src/em_wdog.c
+
+endif #FAMILY == EFM32
+
 ifdef NRF5X
 
-  # Just try and get rid of the compile warnings
+  # Just try and get rid of the compile warnings.
   CFLAGS += -Wno-sign-conversion -Wno-conversion -Wno-unused-parameter
   DEFINES += -DBLUETOOTH
-  
+
   ARM = 1
   ARM_HAS_OWN_CMSIS = 1 # Nordic uses its own CMSIS files in its SDK, these are up-to-date.
   INCLUDE += -I$(ROOT)/targetlibs/nrf5x -I$(NRF5X_SDK_PATH)
   
-  TEMPLATE_PATH = $(ROOT)/targetlibs/nrf5x # This is where common linker for both nRF51 & nRF52 is stored.
+  TEMPLATE_PATH = $(ROOT)/targetlibs/nrf5x/nrf5x_linkers # This is where the common linker for both nRF51 & nRF52 is stored.
   LDFLAGS += -L$(TEMPLATE_PATH)
 
   # These files are the Espruino HAL implementation.
@@ -1300,19 +1431,17 @@ ifdef NRF5X
   SOURCES +=                              \
   targets/nrf5x/main.c                    \
   targets/nrf5x/jshardware.c              \
-  targets/nrf5x/communication_interface.c \
   targets/nrf5x/nrf5x_utils.c
 
   # Careful here.. All these includes and sources assume a SoftDevice. Not efficeint/clean if softdevice (ble) is not enabled...
-  INCLUDE += -I$(NRF5X_SDK_PATH)/examples/ble_peripheral/ble_app_uart/config
+  INCLUDE += -I$(NRF5X_SDK_PATH)/components
   INCLUDE += -I$(NRF5X_SDK_PATH)/components/drivers_nrf/config
-  INCLUDE += -I$(NRF5X_SDK_PATH)/examples/bsp
-  INCLUDE += -I$(NRF5X_SDK_PATH)/components/libraries/fifo
   INCLUDE += -I$(NRF5X_SDK_PATH)/components/libraries/util
+  INCLUDE += -I$(NRF5X_SDK_PATH)/components/drivers_nrf/delay
   INCLUDE += -I$(NRF5X_SDK_PATH)/components/drivers_nrf/uart
   INCLUDE += -I$(NRF5X_SDK_PATH)/components/ble/common
   INCLUDE += -I$(NRF5X_SDK_PATH)/components/drivers_nrf/pstorage
-  INCLUDE += -I$(NRF5X_SDK_PATH)/components/libraries/uart  # Not nRF51?
+  INCLUDE += -I$(NRF5X_SDK_PATH)/components/libraries/uart
   INCLUDE += -I$(NRF5X_SDK_PATH)/components/device
   INCLUDE += -I$(NRF5X_SDK_PATH)/components/libraries/button
   INCLUDE += -I$(NRF5X_SDK_PATH)/components/libraries/timer
@@ -1325,24 +1454,29 @@ ifdef NRF5X
   INCLUDE += -I$(NRF5X_SDK_PATH)/components/ble/ble_advertising
   INCLUDE += -I$(NRF5X_SDK_PATH)/components/libraries/trace
   INCLUDE += -I$(NRF5X_SDK_PATH)/components/softdevice/common/softdevice_handler
+  INCLUDE += -I$(NRF5X_SDK_PATH)/components/drivers_nrf/twi_master
 
   SOURCES += \
-  $(NRF5X_SDK_PATH)/components/libraries/button/app_button.c \
-  $(NRF5X_SDK_PATH)/components/libraries/fifo/app_fifo.c \
+  $(NRF5X_SDK_PATH)/components/libraries/util/app_error.c \
   $(NRF5X_SDK_PATH)/components/libraries/timer/app_timer.c \
   $(NRF5X_SDK_PATH)/components/libraries/trace/app_trace.c \
   $(NRF5X_SDK_PATH)/components/libraries/util/nrf_assert.c \
-  $(NRF5X_SDK_PATH)/components/libraries/uart/retarget.c \
+  $(NRF5X_SDK_PATH)/components/libraries/uart/app_uart.c \
+  $(NRF5X_SDK_PATH)/components/drivers_nrf/delay/nrf_delay.c \
   $(NRF5X_SDK_PATH)/components/drivers_nrf/common/nrf_drv_common.c \
   $(NRF5X_SDK_PATH)/components/drivers_nrf/gpiote/nrf_drv_gpiote.c \
+  $(NRF5X_SDK_PATH)/components/drivers_nrf/uart/nrf_drv_uart.c \
   $(NRF5X_SDK_PATH)/components/drivers_nrf/pstorage/pstorage.c \
   $(NRF5X_SDK_PATH)/components/ble/common/ble_advdata.c \
+  $(NRF5X_SDK_PATH)/components/ble/ble_advertising/ble_advertising.c \
   $(NRF5X_SDK_PATH)/components/ble/common/ble_conn_params.c \
   $(NRF5X_SDK_PATH)/components/ble/ble_services/ble_nus/ble_nus.c \
   $(NRF5X_SDK_PATH)/components/ble/common/ble_srv_common.c \
   $(NRF5X_SDK_PATH)/components/softdevice/common/softdevice_handler/softdevice_handler.c \
-  $(NRF5X_SDK_PATH)/components/drivers_nrf/hal/nrf_adc.c \
-  $(NRF5X_SDK_PATH)/components/drivers_nrf/hal/nrf_nvmc.c
+  $(NRF5X_SDK_PATH)/components/drivers_nrf/hal/nrf_nvmc.c \
+  $(NRF5X_SDK_PATH)/components/drivers_nrf/twi_master/nrf_drv_twi.c \
+  $(NRF5X_SDK_PATH)/components/drivers_nrf/hal/nrf_adc.c
+  # $(NRF5X_SDK_PATH)/components/libraries/util/nrf_log.c
 
 endif #NRF5X
 
@@ -1471,12 +1605,15 @@ CFLAGS += $(OPTIMIZEFLAGS) -c $(ARCHFLAGS) $(DEFINES) $(INCLUDE)
 
 # -Wl,--gc-sections helps remove unused code
 # -Wl,--whole-archive checks for duplicates
-ifndef NRF5X
- LDFLAGS += $(OPTIMIZEFLAGS) $(ARCHFLAGS)
-else ifdef NRF5X
+ifdef NRF5X
  LDFLAGS += $(ARCHFLAGS)
  LDFLAGS += --specs=nano.specs -lc -lnosys
-endif # NRF5X
+else ifdef EFM32
+ LDFLAGS += $(OPTIMIZEFLAGS) $(ARCHFLAGS)
+ LDFLAGS += -Wl,--start-group -lgcc -lc -lnosys -Wl,--end-group
+else
+ LDFLAGS += $(OPTIMIZEFLAGS) $(ARCHFLAGS) 
+endif
 
 ifdef EMBEDDED
 DEFINES += -DEMBEDDED
@@ -1512,6 +1649,7 @@ LDFLAGS += -L$(ESP8266_SDK_ROOT)/lib \
 SOURCES += targets/esp8266/uart.c \
 	targets/esp8266/spi.c \
 	targets/esp8266/user_main.c \
+	targets/esp8266/log.c \
 	targets/esp8266/jshardware.c \
 	targets/esp8266/i2c_master.c \
 	targets/esp8266/esp8266_board_utils.c \
@@ -1546,6 +1684,17 @@ else
   export SILENT=1
 endif
 
+boardjson: scripts/build_board_json.py $(WRAPPERSOURCES)
+	@echo Generating Board JSON
+	$(Q)echo WRAPPERSOURCES = $(WRAPPERSOURCES)
+	$(Q)echo DEFINES =  $(DEFINES)
+ifdef USE_NET
+        # hack to ensure that Pico/etc have all possible firmware configs listed
+	$(Q)python scripts/build_board_json.py $(WRAPPERSOURCES) $(DEFINES) -DUSE_WIZNET=1 -DUSE_CC3000=1 -B$(BOARD)
+else
+	$(Q)python scripts/build_board_json.py $(WRAPPERSOURCES) $(DEFINES) -B$(BOARD) 
+endif
+
 
 $(WRAPPERFILE): scripts/build_jswrapper.py $(WRAPPERSOURCES)
 	@echo Generating JS wrappers
@@ -1560,9 +1709,11 @@ $(PININFOFILE).c $(PININFOFILE).h: scripts/build_pininfo.py
 endif
 
 ifndef NRF5X # nRF5x devices use their own linker files that aren't automatically generated.
+ifndef EFM32
 $(LINKER_FILE): scripts/build_linker.py
 	@echo Generating linker scripts
 	$(Q)python scripts/build_linker.py $(BOARD) $(LINKER_FILE) $(BUILD_LINKER_FLAGS)
+endif # EFM32
 endif # NRF5X
 
 $(PLATFORM_CONFIG_FILE): boards/$(BOARD).py scripts/build_platform_config.py
@@ -1621,6 +1772,7 @@ else ifdef ESP8266
 # user setting area that sits between the two 256KB partitions, so we can merrily use it for
 # code.
 ESP_ZIP     = $(PROJ_NAME).tgz
+ESP_COMBINED512 = $(PROJ_NAME)_combined_512.bin
 USER1_BIN   = espruino_esp8266_user1.bin
 USER2_BIN   = espruino_esp8266_user2.bin
 USER1_ELF   = espruino_esp8266_user1.elf
@@ -1629,11 +1781,12 @@ PARTIAL     = espruino_esp8266_partial.o
 LD_SCRIPT1  = ./targets/esp8266/eagle.app.v6.new.1024.app1.ld
 LD_SCRIPT2  = ./targets/esp8266/eagle.app.v6.new.1024.app2.ld
 APPGEN_TOOL = $(ESP8266_SDK_ROOT)/tools/gen_appbin.py
-BOOTLOADER  = $(ESP8266_SDK_ROOT)/bin/boot_v1.4(b1).bin
+BOOTLOADER  = "$(ESP8266_SDK_ROOT)/bin/boot_v1.4(b1).bin"
 BLANK       = $(ESP8266_SDK_ROOT)/bin/blank.bin
 INIT_DATA   = $(ESP8266_SDK_ROOT)/bin/esp_init_data_default.bin
 
 proj: $(USER1_BIN) $(USER2_BIN) $(ESP_ZIP)
+combined: $(ESP_COMBINED512)
 
 # generate partially linked .o with all Esprunio source files linked
 $(PARTIAL): $(OBJS) $(LINKER_FILE)
@@ -1664,8 +1817,8 @@ $(USER1_BIN): $(USER1_ELF)
 	$(Q)COMPILE=gcc python $(APPGEN_TOOL) $(USER1_ELF) 2 $(ESP_FLASH_MODE) $(ESP_FLASH_FREQ_DIV) $(ESP_FLASH_SIZE) 0 >/dev/null
 	$(Q) rm -f eagle.app.v6.*.bin
 	$(Q) mv eagle.app.flash.bin $@
-	@echo "** user1.bin uses $$(stat -c '%s' $@) bytes of" $(ESP_FLASH_MAX) "available"
-	@if [ $$(stat -c '%s' $@) -gt $$(( $(ESP_FLASH_MAX) )) ]; then echo "$@ too big!"; false; fi
+	@echo "** user1.bin uses $$( stat $(STAT_FLAGS) $@) bytes of" $(ESP_FLASH_MAX) "available"
+	@if [ $$( stat $(STAT_FLAGS) $@) -gt $$(( $(ESP_FLASH_MAX) )) ]; then echo "$@ too big!"; false; fi
 
 # generate binary image for user2, i.e. second OTA partition
 # we make this rule dependent on user1.bin in order to serialize the two rules because they use
@@ -1682,15 +1835,22 @@ $(USER2_BIN): $(USER2_ELF) $(USER1_BIN)
 $(ESP_ZIP): $(USER1_BIN) $(USER2_BIN)
 	$(Q)rm -rf build/$(basename $(ESP_ZIP))
 	$(Q)mkdir -p build/$(basename $(ESP_ZIP))
-	$(Q)cp $(USER1_BIN) $(USER2_BIN) scripts/wiflash $(ESP8266_SDK_ROOT)/bin/blank.bin \
-	  $(ESP8266_SDK_ROOT)/bin/esp_init_data_default.bin \
-	  "$(ESP8266_SDK_ROOT)/bin/boot_v1.4(b1).bin" targets/esp8266/README_flash.txt \
+	$(Q)cp $(USER1_BIN) $(USER2_BIN) $(USER1_ELF) scripts/wiflash $(BLANK) \
+	  $(INIT_DATA) $(BOOTLOADER) targets/esp8266/README_flash.txt \
 	  build/$(basename $(ESP_ZIP))
 	$(Q)tar -C build -zcf $(ESP_ZIP) ./$(basename $(ESP_ZIP))
 
+# Combined 512k binary that includes everything that's needed and can be
+# flashed to 0 in 512k parts
+$(ESP_COMBINED512): $(USER1_BIN) $(USER2_BIN)
+	dd if=/dev/zero ibs=1k count=512 | tr "\000" "\377" > $@
+	dd bs=1 if=$(BOOTLOADER) of=$@ conv=notrunc
+	dd bs=1 seek=4096 if=$(USER1_BIN) of=$@ conv=notrunc
+	dd bs=1 seek=507904 if=$(INIT_DATA) of=$@ conv=notrunc
+
 # Analyze all the .o files and rank them by the amount of static string area used, useful to figure
 # out where to optimize and move strings to flash
-# IMPORTANT: this only works if DISABLE_LTO id defined, e.g. `DISABLE_LTO=1 make`
+# IMPORTANT: this only works if DISABLE_LTO is defined, e.g. `DISABLE_LTO=1 make`
 topstrings: $(PARTIAL)
 	$(Q)for f in `find . -name \*.o`; do \
 	  str=$$($(OBJDUMP) -j .rodata.str1.4 -h $$f 2>/dev/null | \
@@ -1709,7 +1869,7 @@ flash: all $(USER1_BIN) $(USER2_BIN)
 ifndef COMPORT
 	$(error "In order to flash, we need to have the COMPORT variable defined")
 endif
-	-$(ESPTOOL) --port $(COMPORT) --baud $(FLASH_BAUD) write_flash --flash_freq $(ET_FF) --flash_mode qio --flash_size $(ET_FS) 0x0000 "$(BOOTLOADER)" 0x1000 $(USER1_BIN) $(ET_BLANK) $(BLANK)
+	-$(ESPTOOL) --port $(COMPORT) --baud $(FLASH_BAUD) write_flash --flash_freq $(ET_FF) --flash_mode qio --flash_size $(ET_FS) 0x0000 $(BOOTLOADER) 0x1000 $(USER1_BIN) $(ET_BLANK) $(BLANK)
 
 # just flash user1 and don't mess with bootloader or wifi settings
 quickflash: all $(USER1_BIN) $(USER2_BIN)
@@ -1750,8 +1910,7 @@ $(PROJ_NAME).hex: $(PROJ_NAME).elf
 	@$(call obj_to_bin,ihex,hex)
 ifdef SOFTDEVICE
 	echo Merging SoftDevice
-	@echo "    (use 'pip install IntelHex' if you don't have hexmerge.py)"
-	hexmerge.py $(SOFTDEVICE) $(PROJ_NAME).hex -o tmp.hex
+	scripts/hexmerge.py $(SOFTDEVICE) $(PROJ_NAME).hex -o tmp.hex
 	mv tmp.hex $(PROJ_NAME).hex
 endif
 
@@ -1783,8 +1942,8 @@ else ifdef MICROBIT
 	if [ -d "/media/$(USER)/MICROBIT" ]; then cp $(PROJ_NAME).hex /media/$(USER)/MICROBIT;sync; fi
 	if [ -d "/media/MICROBIT" ]; then cp $(PROJ_NAME).hex /media/MICROBIT;sync; fi
 else ifdef NRF5X
-	if [ -d "/media/$(USER)/JLINK" ]; then cp $(PROJ_NAME).bin /media/$(USER)/JLINK;sync; fi
-	if [ -d "/media/JLINK" ]; then cp $(PROJ_NAME).bin /media/JLINK;sync; fi
+	if [ -d "/media/$(USER)/JLINK" ]; then cp $(PROJ_NAME).hex /media/$(USER)/JLINK;sync; fi
+	if [ -d "/media/JLINK" ]; then cp $(PROJ_NAME).hex /media/JLINK;sync; fi
 else
 	echo ST-LINK flash
 	st-flash --reset write $(PROJ_NAME).bin $(BASEADDRESS)

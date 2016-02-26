@@ -42,6 +42,10 @@ Creates a pin from the given argument (or returns undefined if no argument)
 JsVar *jswrap_pin_constructor(JsVar *val) {
   Pin pin = jshGetPinFromVar(val);
   if (!jshIsPinValid(pin)) return 0;
+#ifdef ESP8266
+  if (jsvIsInt(val) && !jsvIsPin(val))
+    jsWarn("The Pin() constructor is deprecated. Please use `D%d`, or NodeMCU.Dx instead", pin);
+#endif
   return jsvNewFromPin(pin);
 }
 
@@ -203,7 +207,7 @@ JsVar *jswrap_pin_getInfo(
   jsvObjectSetChildAndUnLock(obj, "port", jsvNewFromString(buf));
   jsvObjectSetChildAndUnLock(obj, "num", jsvNewFromInteger(inf->pin-JSH_PIN0));
 #ifdef STM32
-  uint32_t *addr;
+  volatile uint32_t *addr;
   addr = jshGetPinAddress(pin, JSGPAF_INPUT);
   if (addr) jsvObjectSetChildAndUnLock(obj, "in_addr", jsvNewFromInteger((JsVarInt)addr));
   addr = jshGetPinAddress(pin, JSGPAF_OUTPUT);
