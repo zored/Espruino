@@ -23,6 +23,8 @@ info = {
     'variables' : 5450,
     'bootloader' : 1,
     'binary_name' : 'espruino_%v_iskrajs.bin',
+    'images_url_base': 'http://js.amperka.ru/img/',
+    'binaries_url_base': 'http://js.amperka.ru/binaries/',
 }
 
 chip = {
