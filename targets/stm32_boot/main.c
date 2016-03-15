@@ -64,7 +64,7 @@ int main(void) {
         buttonPressed++;
       if (buttonLifted>10000 && buttonPressed>10000) {
         setLEDs(0);
-        jumpToEspruinoBinary();
+        deInitUsbAndJumpToEspruinoBinary();
       }
     } else {
       if (buttonLifted<0xFFFFFFFF) 
