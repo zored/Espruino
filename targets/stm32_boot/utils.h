@@ -21,4 +21,5 @@ void _putc(char charData);
 
 bool isButtonPressed();
 bool jumpToEspruinoBinary();
+bool deInitUsbAndJumpToEspruinoBinary();
 void initHardware();
