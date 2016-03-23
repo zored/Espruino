@@ -51,7 +51,7 @@ Returns the version of Espruino as a String
  */
 
 #ifndef SAVE_ON_FLASH
-/* NOTE: The order of these is very important, as 
+/* NOTE: The order of these is very important, as
 the online compiler has its own copy of this table */
 const void *exportPtrs[] = {
     jsvLockAgainSafe,
@@ -93,6 +93,9 @@ JsVar *jswrap_process_env() {
   jsvObjectSetChildAndUnLock(obj, "GIT_COMMIT", jsvNewFromString(STRINGIFY(GIT_COMMIT)));
 #endif
   jsvObjectSetChildAndUnLock(obj, "BOARD", jsvNewFromString(PC_BOARD_ID));
+#ifdef PC_JSON_URL
+  jsvObjectSetChildAndUnLock(obj, "JSON_URL", jsvNewFromString(PC_JSON_URL));
+#endif
   jsvObjectSetChildAndUnLock(obj, "FLASH", jsvNewFromInteger(FLASH_TOTAL));
   jsvObjectSetChildAndUnLock(obj, "RAM", jsvNewFromInteger(RAM_TOTAL));
   jsvObjectSetChildAndUnLock(obj, "SERIAL", jswrap_interface_getSerial());

@@ -162,6 +162,9 @@ codeOut("#define PC_BOARD_ID \""+boardname+"\"")
 codeOut("#define PC_BOARD_CHIP \""+board.chip["part"]+"\"")
 codeOut("#define PC_BOARD_CHIP_FAMILY \""+board.chip["family"]+"\"")
 
+if "json_url" in board.info:
+    codeOut('#define PC_JSON_URL "{0}"'.format(board.info['json_url']))
+
 codeOut("")
 
 # Linker vars used for:
