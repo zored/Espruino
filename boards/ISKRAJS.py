@@ -25,6 +25,7 @@ info = {
     'binary_name' : 'espruino_%v_iskrajs.bin',
     'images_url_base': 'http://js.amperka.ru/img/',
     'binaries_url_base': 'http://js.amperka.ru/binaries/',
+    'json_url': 'http://js.amperka.ru/json/ISKRAJS.json',
 }
 
 chip = {
@@ -39,6 +40,7 @@ chip = {
     'i2c' : 3,
     'adc' : 3,
     'dac' : 2,
+    'place_text_section' : 0x00004000,
 }
 
 # TODO
