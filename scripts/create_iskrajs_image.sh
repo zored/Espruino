@@ -52,6 +52,9 @@ echo Add espruino
 echo ---------------------
 dd bs=1 seek=$BOOTLOADERSIZE if=$ESPRUINOFILE of=$IMGFILE conv=notrunc || { echo 'Build failed' ; exit 1; }
 
+echo Add padding
+echo ---------------------
+dd if=/dev/null of=$IMGFILE bs=1 count=1 seek=1048576 # 1024*1024
 
 cp $IMGFILE $ESPRUINOFILE || { echo 'Build failed' ; exit 1; }
 echo ---------------------
