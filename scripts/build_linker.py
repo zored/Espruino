@@ -139,6 +139,9 @@ codeOut("""
     *(.rodata)  
     *(.rodata*) 
 
+    KEEP(*(.init))
+    KEEP(*(.fini))
+
     . = ALIGN(4);
     _etext = .;
   } >FLASH
