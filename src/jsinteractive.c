@@ -378,7 +378,7 @@ void jsiConsoleReturnInputLine() {
   }
 }
 void jsiConsolePrintPosition(struct JsLex *lex, size_t tokenPos) {
-  jslPrintPosition((vcbprintf_callback)jsiConsolePrintString, 0, lex, tokenPos);
+  jslPrintPosition((vcbprintf_callback)jsiConsolePrintString, 0, tokenPos);
 }
 
 /**
@@ -430,9 +430,9 @@ static JsVarRef _jsiInitNamedArray(const char *name) {
 
 // Used when recovering after being flashed
 // 'claim' anything we are using
-void jsiSoftInit() {
+void jsiSoftInit(bool hasBeenReset) {
   jsErrorFlags = 0;
-  events = jsvNewWithFlags(JSV_ARRAY);
+  events = jsvNewEmptyArray();
   inputLine = jsvNewFromEmptyString();
   inputCursorPos = 0;
   jsiLineNumberOffset = 0;
@@ -452,8 +452,11 @@ void jsiSoftInit() {
   jsiLastIdleTime = jshGetSystemTime();
   jsiTimeSinceCtrlC = 0xFFFFFFFF;
 
-  // Runw wrapper initialisation stuff
+  // Run wrapper initialisation stuff
   jswInit();
+
+  // Run 'boot code' - textual JS in flash
+  jsfLoadBootCodeFromFlash(hasBeenReset);
 
   // Now run initialisation code
   JsVar *initCode = jsvObjectGetChild(execInfo.hiddenRoot, JSI_INIT_CODE_NAME, 0);
@@ -731,13 +734,13 @@ void jsiSemiInit(bool autoLoad) {
   if (loadFlash) {
     jspSoftKill();
     jsvSoftKill();
-    jsfLoadFromFlash();
+    jsfLoadStateFromFlash();
     jsvSoftInit();
     jspSoftInit();
   }
 
   // Softinit may run initialisation code that will overwrite defaults
-  jsiSoftInit();
+  jsiSoftInit(!autoLoad);
 
 #ifdef ESP8266
   jshSoftInit();
@@ -842,7 +845,8 @@ int jsiCountBracketsInInput() {
   int brackets = 0;
 
   JsLex lex;
-  jslInit(&lex, inputLine);
+  JsLex *oldLex = jslSetLex(&lex);
+  jslInit(inputLine);
   while (lex.tk!=LEX_EOF && lex.tk!=LEX_UNFINISHED_COMMENT) {
     if (lex.tk=='{' || lex.tk=='[' || lex.tk=='(') brackets++;
     if (lex.tk=='}' || lex.tk==']' || lex.tk==')') brackets--;
@@ -851,7 +855,8 @@ int jsiCountBracketsInInput() {
   }
   if (lex.tk==LEX_UNFINISHED_COMMENT)
     brackets=1000; // if there's an unfinished comment, we're in the middle of something
-  jslKill(&lex);
+  jslKill();
+  jslSetLex(oldLex);
 
   return brackets;
 }
@@ -1165,7 +1170,8 @@ void jsiTabComplete() {
   size_t partialStart = 0;
 
   JsLex lex;
-  jslInit(&lex, inputLine);
+  JsLex *oldLex = jslSetLex(&lex);
+  jslInit(inputLine);
   while (lex.tk!=LEX_EOF && jsvStringIteratorGetIndex(&lex.tokenStart.it)<=inputCursorPos) {
     if (lex.tk=='.') {
       jsvUnLock(object);
@@ -1183,7 +1189,8 @@ void jsiTabComplete() {
     }
     jslGetNextToken(&lex);
   }
-  jslKill(&lex);
+  jslKill();
+  jslSetLex(oldLex);
   if (!data.partial) {
     jsvUnLock(object);
     return;
@@ -1458,7 +1465,7 @@ void jsiHandleChar(char ch) {
 void jsiQueueEvents(JsVar *object, JsVar *callback, JsVar **args, int argCount) { // an array of functions, a string, or a single function
   assert(argCount<10);
 
-  JsVar *event = jsvNewWithFlags(JSV_OBJECT);
+  JsVar *event = jsvNewObject();
   if (event) { // Could be out of memory error!
     jsvUnLock(jsvAddNamedChild(event, callback, "func"));
 
@@ -1741,7 +1748,7 @@ void jsiIdle() {
                 pinIsHigh = oldWatchState;
               }
             } else { // else create a new timeout
-              timeout = jsvNewWithFlags(JSV_OBJECT);
+              timeout = jsvNewObject();
               if (timeout) {
                 jsvObjectSetChild(timeout, "watch", watchPtr); // no unlock
                 jsvObjectSetChildAndUnLock(timeout, "time", jsvNewFromLongInteger((JsSysTime)(eventTime - jsiLastIdleTime) + debounce));
@@ -1763,7 +1770,7 @@ void jsiIdle() {
             if (jsiShouldExecuteWatch(watchPtr, pinIsHigh)) { // edge triggering
               JsVar *watchCallback = jsvObjectGetChild(watchPtr, "callback", 0);
               bool watchRecurring = jsvGetBoolAndUnLock(jsvObjectGetChild(watchPtr,  "recur", 0));
-              JsVar *data = jsvNewWithFlags(JSV_OBJECT);
+              JsVar *data = jsvNewObject();
               if (data) {
                 jsvObjectSetChildAndUnLock(data, "lastTime", jsvObjectGetChild(watchPtr, "lastTime", 0));
                 // set both data.time, and watch.lastTime in one go
@@ -1837,7 +1844,7 @@ void jsiIdle() {
       bool exec = true;
       JsVar *data = 0;
       if (watchPtr) {
-        data = jsvNewWithFlags(JSV_OBJECT);
+        data = jsvNewObject();
         // if we were from a watch then we were delayed by the debounce time...
         if (data) {
           JsVarInt delay = jsvGetIntegerAndUnLock(jsvObjectGetChild(watchPtr, "debounce", 0));
@@ -1965,11 +1972,11 @@ void jsiIdle() {
       jsiSoftKill();
       jspSoftKill();
       jsvSoftKill();
-      jsfSaveToFlash();
+      jsfSaveToFlash(SFF_SAVE_STATE, 0);
       jshReset();
       jsvSoftInit();
       jspSoftInit();
-      jsiSoftInit();
+      jsiSoftInit(false /* not been reset */);
     }
     if ((s&JSIS_TODO_FLASH_LOAD) == JSIS_TODO_FLASH_LOAD) {
       jsiStatus &= (JsiStatus)~JSIS_TODO_FLASH_LOAD;
@@ -1978,10 +1985,10 @@ void jsiIdle() {
       jspSoftKill();
       jsvSoftKill();
       jshReset();
-      jsfLoadFromFlash();
+      jsfLoadStateFromFlash();
       jsvSoftInit();
       jspSoftInit();
-      jsiSoftInit();
+      jsiSoftInit(false /* not been reset */);
     }
     jsiSetBusy(BUSY_INTERACTIVE, false);
   }
@@ -1991,7 +1998,7 @@ void jsiIdle() {
    * if we think we need to */
   if (loopsIdling==1 &&
       minTimeUntilNext > jshGetTimeFromMilliseconds(10) &&
-      jsvMoreFreeVariablesThan(JS_VARS_BEFORE_IDLE_GC)) {
+      !jsvMoreFreeVariablesThan(JS_VARS_BEFORE_IDLE_GC)) {
     jsiSetBusy(BUSY_INTERACTIVE, true);
     jsvGarbageCollect();
     jsiSetBusy(BUSY_INTERACTIVE, false);
@@ -2164,12 +2171,12 @@ void jsiDebuggerLoop() {
   jsiConsoleRemoveInputLine();
   jsiStatus = (jsiStatus & ~JSIS_ECHO_OFF_MASK) | JSIS_IN_DEBUGGER;
 
-  if (execInfo.lex) {
+  if (lex) {
     char lineStr[9];
     // Get a string fo the form '1234    ' for the line number
     // ... but only if the line number was set, otherwise use spaces
-    if (execInfo.lex->lineNumberOffset) {
-      itostr((JsVarInt)jslGetLineNumber(execInfo.lex) + (JsVarInt)execInfo.lex->lineNumberOffset - 1, lineStr, 10);
+    if (lex->lineNumberOffset) {
+      itostr((JsVarInt)jslGetLineNumber(lex) + (JsVarInt)lex->lineNumberOffset - 1, lineStr, 10);
     } else {
       lineStr[0]=0;
     }
@@ -2177,7 +2184,7 @@ void jsiDebuggerLoop() {
     while (lineLen < sizeof(lineStr)-1) lineStr[lineLen++]=' ';
     lineStr[lineLen] = 0;
     // print the line of code, prefixed by the line number, and with a pointer to the exact character in question
-    jslPrintTokenLineMarker((vcbprintf_callback)jsiConsolePrintString, 0, execInfo.lex, execInfo.lex->tokenLastStart, lineStr);
+    jslPrintTokenLineMarker((vcbprintf_callback)jsiConsolePrintString, 0, lex->tokenLastStart, lineStr);
   }
 
   while (!(jsiStatus & JSIS_EXIT_DEBUGGER) &&
@@ -2249,7 +2256,8 @@ void jsiDebuggerPrintScope(JsVar *scope) {
 void jsiDebuggerLine(JsVar *line) {
   assert(jsvIsString(line));
   JsLex lex;
-  jslInit(&lex, line);
+  JsLex *oldLex = jslSetLex(&lex);
+  jslInit(line);
   bool handled = false;
   if (lex.tk == LEX_ID || lex.tk == LEX_R_CONTINUE) {
     // continue is a reserved word!
@@ -2288,7 +2296,6 @@ void jsiDebuggerLine(JsVar *line) {
     } else if (!strcmp(id,"print") || !strcmp(id,"p")) {
       jslGetNextToken(&lex);
       JsExecInfo oldExecInfo = execInfo;
-      execInfo.lex = &lex; // execute with the remainder of the line
       execInfo.execute = EXEC_YES;
       JsVar *v = jsvSkipNameAndUnLock(jspParse());
       execInfo = oldExecInfo;
@@ -2327,6 +2334,7 @@ void jsiDebuggerLine(JsVar *line) {
     jsiConsolePrint("In debug mode: Expected a simple ID, type 'help' for more info.\n");
   }
 
-  jslKill(&lex);
+  jslKill();
+  jslSetLex(oldLex);
 }
 #endif // USE_DEBUGGER
