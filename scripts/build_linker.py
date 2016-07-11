@@ -71,7 +71,7 @@ def codeOut(s): linkerFile.write(s+"\n");
 # -----------------------------------------------------------------------------------------
 BOOTLOADER_SIZE = common.get_bootloader_size(board);
 RAM_BASE = 0x20000000;
-FLASH_BASE = 0x00000000;
+FLASH_BASE = 0x08000000;
 RAM_SIZE = board.chip["ram"]*1024;
 FLASH_SIZE = board.chip["flash"]*1024;
 
@@ -181,6 +181,8 @@ codeOut("""
   /* Remove stuff we don't want */
   /DISCARD/ :
   {
+    *(.init) /* we don't call init and fini anyway. GCC 5.x starting added them but then optimising them out */
+    *(.fini)
     libc.a ( * )
     libm.a ( * )
     libgcc.a ( * )

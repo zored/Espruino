@@ -68,7 +68,7 @@ static void telnetLineCB(char *line) {
   // Pass the line to the interactive module ...
 
   jshPushIOCharEvents(jsiGetConsoleDevice(), line, strlen(line));
-  //jspEvaluate(line);
+  //jspEvaluate(line, false);
   //jsiDumpState();
   telnet_send("JS> ");
 } // End of lineCB
@@ -240,6 +240,9 @@ static void mainLoop() {
 static void initDone() {
   os_printf("> initDone\n");
   otaInit(88);
+
+  extern void gdbstub_init();
+  gdbstub_init();
 
   // Discard any junk data in the input as this is a boot.
   //uart_rx_discard();

@@ -222,8 +222,20 @@ void jswrap_object_keys_or_property_names_cb(
 
     while (symbols) {
       unsigned int i;
-      for (i=0;i<symbols->symbolCount;i++) {
-        JsVar *name = jsvNewFromString(&symbols->symbolChars[symbols->symbols[i].strOffset]);
+      unsigned char symbolCount = READ_FLASH_UINT8(&symbols->symbolCount);
+      for (i=0;i<symbolCount;i++) {
+        unsigned short strOffset = READ_FLASH_UINT16(&symbols->symbols[i].strOffset);
+#ifndef USE_FLASH_MEMORY
+        JsVar *name = jsvNewFromString(&symbols->symbolChars[strOffset]);
+#else
+        // On the esp8266 the string is in flash, so we have to copy it to RAM first
+        // We can't use flash_strncpy here because it assumes that strings start on a word
+        // boundary and that's not the case here.
+        char buf[64], *b = buf, c; const char *s = &symbols->symbolChars[strOffset];
+        do { c = READ_FLASH_UINT8(s++); *b++ = c; } while (c && b != buf+64);
+        JsVar *name = jsvNewFromString(buf);
+#endif
+        //os_printf_plus("OBJ cb %s\n", buf);
         callback(data, name);
         jsvUnLock(name);
       }
@@ -262,7 +274,8 @@ JsVar *jswrap_object_keys_or_property_names(
   "name" : "create",
   "generate" : "jswrap_object_create",
   "params" : [
-    ["proto","JsVar","A prototype object","propertiesObject","JsVar","An object containing properties. NOT IMPLEMENTED"]
+    ["proto","JsVar","A prototype object"],
+    ["propertiesObject","JsVar","An object containing properties. NOT IMPLEMENTED"]
   ],
   "return" : ["JsVar","A new object"]
 }
@@ -433,11 +446,11 @@ Adds new properties to the Object. See `Object.defineProperty` for more informat
  */
 JsVar *jswrap_object_defineProperties(JsVar *parent, JsVar *props) {
   if (!jsvIsObject(parent)) {
-    jsExceptionHere(JSET_ERROR, "First argument must be an object, got %t", parent);
+    jsExceptionHere(JSET_ERROR, "First argument must be an object, got %t\n", parent);
     return 0;
   }
   if (!jsvIsObject(props)) {
-    jsExceptionHere(JSET_ERROR, "Second argument must be an object, got %t", props);
+    jsExceptionHere(JSET_ERROR, "Second argument must be an object, got %t\n", props);
     return 0;
   }
 
@@ -453,6 +466,49 @@ JsVar *jswrap_object_defineProperties(JsVar *parent, JsVar *props) {
 
   return jsvLockAgain(parent);
 }
+
+/*JSON{
+  "type" : "staticmethod",
+  "class" : "Object",
+  "name" : "getPrototypeOf",
+  "generate" : "jswrap_object_getPrototypeOf",
+  "params" : [
+    ["object","JsVar","An object"]
+  ],
+  "return" : ["JsVar","The prototype"]
+}
+Get the prototype of the given object - this is like writing `object.__proto__`
+but is the 'proper' ES6 way of doing it
+ */
+JsVar *jswrap_object_getPrototypeOf(JsVar *object) {
+  return jspGetNamedField(object, "__proto__", false);
+}
+
+/*JSON{
+  "type" : "staticmethod",
+  "class" : "Object",
+  "name" : "setPrototypeOf",
+  "generate" : "jswrap_object_setPrototypeOf",
+  "params" : [
+    ["object","JsVar","An object"],
+    ["prototype","JsVar","The prototype to set on the object"]
+  ],
+  "return" : ["JsVar","The object passed in"]
+}
+Set the prototype of the given object - this is like writing
+`object.__proto__ = prototype` but is the 'proper' ES6 way of doing it
+ */
+JsVar *jswrap_object_setPrototypeOf(JsVar *object, JsVar *proto) {
+  JsVar *v = jspGetNamedField(object, "__proto__", true);
+  if (!jsvIsName(v)) {
+    jsExceptionHere(JSET_TYPEERROR, "Can't extend this object\n");
+  } else {
+    jsvSetValueOfName(v, proto);
+  }
+  jsvUnLock(v);
+  return jsvLockAgain(object);
+}
+
 // --------------------------------------------------------------------------
 //                                                         Misc constructors
 
@@ -510,7 +566,7 @@ void jswrap_object_on(JsVar *parent, JsVar *event, JsVar *listener) {
     return;
   }
 
-  JsVar *eventName = jsvVarPrintf(JS_EVENT_PREFIX"%s",event);
+  JsVar *eventName = jsvVarPrintf(JS_EVENT_PREFIX"%v",event);
   if (!eventName) return; // no memory
 
   JsVar *eventList = jsvFindChildFromVar(parent, eventName, true);

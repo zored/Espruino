@@ -23,6 +23,31 @@
  * but which are good to know about */
 JsErrorFlags jsErrorFlags;
 
+
+bool isWhitespace(char ch) {
+    return (ch==0x09) || // \t - tab
+           (ch==0x0B) || // vertical tab
+           (ch==0x0C) || // form feed
+           (ch==0x20) || // space
+           (((unsigned char)ch)==0xA0) || // no break space
+           (ch=='\n') ||
+           (ch=='\r');
+}
+
+bool isNumeric(char ch) {
+    return (ch>='0') && (ch<='9');
+}
+
+bool isHexadecimal(char ch) {
+    return ((ch>='0') && (ch<='9')) ||
+           ((ch>='a') && (ch<='f')) ||
+           ((ch>='A') && (ch<='F'));
+}
+bool isAlpha(char ch) {
+    return ((ch>='a') && (ch<='z')) || ((ch>='A') && (ch<='Z')) || ch=='_';
+}
+
+
 bool isIDString(const char *s) {
   if (!isAlpha(*s))
     return false;
@@ -162,7 +187,7 @@ long long stringToInt(const char *s) {
   return stringToIntWithRadix(s,0,0);
 }
 
-#ifndef FLASH_STR
+#ifndef USE_FLASH_MEMORY
 
 // JsError, jsWarn, jsExceptionHere implementations that expect the format string to be in normal
 // RAM where is can be accessed normally.
@@ -307,24 +332,13 @@ NO_INLINE void jsExceptionHere_flash(JsExceptionType type, const char *ffmt, ...
 
 #endif
 
-NO_INLINE void jsWarnAt(const char *message, struct JsLex *lex, size_t tokenPos) {
-  jsiConsoleRemoveInputLine();
-  jsiConsolePrint("WARNING: ");
-  jsiConsolePrintString(message);
-  if (lex) {
-    jsiConsolePrint(" at ");
-    jsiConsolePrintPosition(lex, tokenPos);
-  } else
-    jsiConsolePrint("\n");
-}
-
 NO_INLINE void jsAssertFail(const char *file, int line, const char *expr) {
   static bool inAssertFail = false;
   bool wasInAssertFail = inAssertFail;
   inAssertFail = true;
   jsiConsoleRemoveInputLine();
   if (expr) {
-#ifndef FLASH_STR
+#ifndef USE_FLASH_MEMORY
     jsiConsolePrintf("ASSERT(%s) FAILED AT ", expr);
 #else
     jsiConsolePrintString("ASSERT(");
@@ -361,7 +375,7 @@ NO_INLINE void jsAssertFail(const char *file, int line, const char *expr) {
   inAssertFail = false;
 }
 
-#ifdef FLASH_STR
+#ifdef USE_FLASH_MEMORY
 // Helpers to deal with constant strings stored in flash that have to be accessed using word-aligned
 // and word-sized reads
 
@@ -390,6 +404,7 @@ char *flash_strncpy(char *dst, const char *src, size_t c) {
   uint32_t *s = (uint32_t *)src;
   size_t slen = flash_strlen(src);
   size_t len = slen > c ? c : slen;
+
   // copy full words from source string
   while (len >= 4) {
     uint32_t w = *s++;
@@ -410,6 +425,44 @@ char *flash_strncpy(char *dst, const char *src, size_t c) {
   if (slen < c) *d = 0;
   return dst;
 }
+
+// Compare a string in memory with a string in flash
+int flash_strcmp(const char *mem, const char *flash) {
+  while (1) {
+    char m = *mem++;
+    char c = READ_FLASH_UINT8(flash++);
+    if (m == 0) return c != 0 ? -1 : 0;
+    if (c == 0) return 1;
+    if (c > m) return -1;
+    if (m > c) return 1;
+  }
+}
+
+// memcopy a string from flash
+unsigned char *flash_memcpy(unsigned char *dst, const unsigned char *src, size_t c) {
+  unsigned char *d = dst;
+  uint32_t *s = (uint32_t *)src;
+  size_t len = c;
+
+  // copy full words from source string
+  while (len >= 4) {
+    uint32_t w = *s++;
+    *d++ = w & 0xff; w >>= 8;
+    *d++ = w & 0xff; w >>= 8;
+    *d++ = w & 0xff; w >>= 8;
+    *d++ = w & 0xff;
+    len -= 4;
+  }
+  // copy any remaining bytes
+  if (len > 0) {
+    uint32_t w = *s++;
+    while (len-- > 0) {
+      *d++ = w & 0xff; w >>= 8;
+    }
+  }
+  return dst;
+}
+
 #endif
 
 
@@ -746,7 +799,7 @@ int espruino_snprintf( char * s, size_t n, const char * fmt, ... ) {
 }
 
 #ifdef ARM
-extern int LINKER_END_VAR;
+extern int LINKER_END_VAR; // should be 'void', but 'int' avoids warnings
 #endif
 
 /** get the amount of free stack we have, in bytes */

@@ -59,15 +59,19 @@ bool jsiExecuteEventCallbackArgsArray(JsVar *thisVar, JsVar *callbackVar, JsVar 
 IOEventFlags jsiGetDeviceFromClass(JsVar *deviceClass);
 JsVar *jsiGetClassNameFromDevice(IOEventFlags device);
 
-/// Change the console to a new location
-void jsiSetConsoleDevice(IOEventFlags device);
+/** Change the console to a new location - if force is set, this console
+ * device will be 'sticky' - it will not change when the device changes
+ * connection state */
+void jsiSetConsoleDevice(IOEventFlags device, bool force);
 /// Get the device that the console is currently on
 IOEventFlags jsiGetConsoleDevice();
+/// is the console forced into a given place (See jsiSetConsoleDevice)
+bool jsiIsConsoleDeviceForced();
 /// Transmit a byte
 void jsiConsolePrintChar(char data);
 /// Transmit a string (may be any string)
 void jsiConsolePrintString(const char *str);
-#ifndef FLASH_STR
+#ifndef USE_FLASH_MEMORY
 #define jsiConsolePrint jsiConsolePrintString
 /// Write the formatted string to the console (see vcbprintf)
 void jsiConsolePrintf(const char *fmt, ...);
@@ -88,8 +92,6 @@ void jsiConsolePrintString_int(const char *str);
 #endif
 /// Print the contents of a string var - directly
 void jsiConsolePrintStringVar(JsVar *v);
-/// Transmit a position in the lexer (for reporting errors)
-void jsiConsolePrintPosition(struct JsLex *lex, size_t tokenPos);
 /// If the input line was shown in the console, remove it
 void jsiConsoleRemoveInputLine();
 /// Change what is in the inputline into something else (and update the console)
@@ -135,7 +137,8 @@ typedef enum {
   JSIS_TODO_FLASH_LOAD = 128, // load from flash
   JSIS_TODO_RESET = 256, // reset the board, don't load anything
   JSIS_TODO_MASK = JSIS_TODO_FLASH_SAVE|JSIS_TODO_FLASH_LOAD|JSIS_TODO_RESET,
-
+  JSIS_CONSOLE_FORCED = 512, // see jsiSetConsoleDevice
+  JSIS_WATCHDOG_AUTO = 1024, // Automatically kick the watchdog timer on idle
 
   JSIS_ECHO_OFF_MASK = JSIS_ECHO_OFF|JSIS_ECHO_OFF_FOR_LINE
 } PACKED_FLAGS JsiStatus;

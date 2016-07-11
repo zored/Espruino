@@ -38,6 +38,10 @@
 #define USE_RTC
 #endif
 
+#ifdef ESPRUINOWIFI
+#define USE_RTC
+#endif
+
 #define IRQ_PRIOR_SPI 1 // we want to be very sure of not losing SPI (this is handled quickly too)
 #define IRQ_PRIOR_SYSTICK 2
 #define IRQ_PRIOR_USART 6 // a little higher so we don't get lockups of something tries to print
@@ -977,7 +981,21 @@ ALWAYS_INLINE bool jshPinGetValue(Pin pin) {
 }
 
 // ----------------------------------------------------------------------------
-static void jshResetSerial() {
+static void jshResetPeripherals() {
+  // Set pin state to analog input - saves some power
+  Pin i;
+  for (i=0;i<JSH_PIN_COUNT;i++) {
+#ifdef DEFAULT_CONSOLE_TX_PIN
+    if (i==DEFAULT_CONSOLE_TX_PIN) continue;
+#endif
+#ifdef DEFAULT_CONSOLE_RX_PIN
+    if (i==DEFAULT_CONSOLE_RX_PIN) continue;
+#endif
+    if (!IS_PIN_USED_INTERNALLY(i) && !IS_PIN_A_BUTTON(i)) {
+      jshPinSetState(i, JSHPINSTATE_ADC_IN);
+    }
+  }
+  // Initialise UART if we have a default console device on it
   if (DEFAULT_CONSOLE_DEVICE != EV_USBSERIAL) {
     JshUSARTInfo inf;
     jshUSARTInitInfo(&inf);
@@ -992,6 +1010,15 @@ static void jshResetSerial() {
 #endif
     jshUSARTSetup(DEFAULT_CONSOLE_DEVICE, &inf);
   }
+  // initialise button state
+#ifdef BTN1_PININDEX
+#ifdef BTN1_PINSTATE
+  jshSetPinStateIsManual(BTN1_PININDEX, true); // so subsequent reads don't overwrite the state
+  jshPinSetState(BTN1_PININDEX, BTN1_PINSTATE);
+#else
+  jshPinSetState(BTN1_PININDEX, JSHPINSTATE_GPIO_IN);
+#endif
+#endif
 }
 
 void jshInit() {
@@ -1089,16 +1116,6 @@ void jshInit() {
   jshSetupRTCPrescaler(!jshIsRTCUsingLSE());
 #endif
 
-  // initialise button
-#ifdef BTN1_PININDEX
-#ifdef BTN1_PINSTATE
-  jshSetPinStateIsManual(BTN1_PININDEX, true); // so subsequent reads don't overwrite the state
-  jshPinSetState(BTN1_PININDEX, BTN1_PINSTATE);
-#else
-  jshPinSetState(BTN1_PININDEX, JSHPINSTATE_GPIO_IN);
-#endif
-#endif
-
   // PREEMPTION
   NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);
   // Slow the IO clocks down - we don't need them going so fast!
@@ -1116,7 +1133,11 @@ void jshInit() {
   jshResetRTCTimer();
 #endif
 
-  jshResetSerial();
+  jshResetPeripherals();
+#ifdef LED1_PININDEX
+  // turn led back on (status) as it would have just been turned off
+  jshPinOutput(LED1_PININDEX, 1);
+#endif
 
 #ifdef SWD_ONLY_NO_JTAG
   // reclaim A13 and A14
@@ -1253,21 +1274,7 @@ void jshInit() {
 
 void jshReset() {
   jshResetDevices();
-  Pin i;
-  for (i=0;i<JSH_PIN_COUNT;i++) {
-#ifdef DEFAULT_CONSOLE_TX_PIN
-    if (i==DEFAULT_CONSOLE_TX_PIN) continue;
-#endif
-#ifdef DEFAULT_CONSOLE_RX_PIN
-    if (i==DEFAULT_CONSOLE_RX_PIN) continue;
-#endif
-    if (!IS_PIN_USED_INTERNALLY(i) && !IS_PIN_A_BUTTON(i)) {
-      jshPinSetState(i, JSHPINSTATE_ADC_IN);
-    }
-  }
-
-  // re-initialise serial port (like was done on jshInit)
-  jshResetSerial();
+  jshResetPeripherals();
 }
 
 void jshKill() {
@@ -1279,17 +1286,16 @@ void jshIdle() {
   bool USBConnected = jshIsUSBSERIALConnected();
   if (wasUSBConnected != USBConnected) {
     wasUSBConnected = USBConnected;
-    if (USBConnected && jsiGetConsoleDevice() != EV_LIMBO)
-      jsiSetConsoleDevice(EV_USBSERIAL);
-    else {
-      if (jsiGetConsoleDevice() == EV_USBSERIAL)
-        jsiSetConsoleDevice(DEFAULT_CONSOLE_DEVICE);
+    if (USBConnected && jsiGetConsoleDevice()!=EV_LIMBO) {
+      if (!jsiIsConsoleDeviceForced())
+        jsiSetConsoleDevice(EV_USBSERIAL, false);
+    } else {
+      if (!jsiIsConsoleDeviceForced() && jsiGetConsoleDevice()==EV_USBSERIAL)
+        jsiSetConsoleDevice(DEFAULT_CONSOLE_DEVICE, false);
       jshTransmitClearDevice(EV_USBSERIAL); // clear the transmit queue
     }
   }
 #endif
-  // Kick the watchdog (this only happens from the idle loop)
-  IWDG_ReloadCounter();
 }
 
 // ----------------------------------------------------------------------------
@@ -2659,7 +2665,7 @@ void jshSetOutputValue(JshPinFunction func, int value) {
   }
 }
 
-// Enable watchdog with a timeout in seconds
+/// Enable watchdog with a timeout in seconds, it'll reset the chip if jshKickWatchDog isn't called within the timeout
 void jshEnableWatchDog(JsVarFloat timeout) {
     // Enable LSI
     RCC_LSICmd(ENABLE);
@@ -2687,6 +2693,11 @@ void jshEnableWatchDog(JsVarFloat timeout) {
 
     /* Enable IWDG (the LSI oscillator will be enabled by hardware) */
     IWDG_Enable();
+}
+
+// Kick the watchdog
+void jshKickWatchDog() {
+  IWDG_ReloadCounter();
 }
 
 volatile uint32_t *jshGetPinAddress(Pin pin, JshGetPinAddressFlags flags) {
@@ -2766,6 +2777,10 @@ static void addFlashArea(JsVar *jsFreeFlash, uint32_t addr, uint32_t length) {
 JsVar *jshFlashGetFree() {
   JsVar *jsFreeFlash = jsvNewEmptyArray();
   if (!jsFreeFlash) return 0;
+#if defined(ESPRUINOWIFI)
+  // 3x 16kB pages of flash left free right after bootloader
+  addFlashArea(jsFreeFlash, FLASH_START|(16*1024), 3*16*1024);
+#endif
   // Try and find the page after the end of firmware
   extern int LINKER_ETEXT_VAR; // end of flash text (binary) section
   uint32_t firmwareEnd = FLASH_START | (uint32_t)&LINKER_ETEXT_VAR;
@@ -2913,8 +2928,8 @@ unsigned int jshSetSystemClock(JsVar *options) {
   RCC_SYSCLKConfig(RCC_SYSCLKSource_HSE);
   // set latency
   if (latency!=255) FLASH_SetLatency(latency);
-  if (pclk1>=0) RCC_PCLK1Config(pclk1);
-  if (pclk2>=0) RCC_PCLK2Config(pclk2);
+  if (pclk1>=0) RCC_PCLK1Config((uint32_t)pclk1);
+  if (pclk2>=0) RCC_PCLK2Config((uint32_t)pclk2);
   // update PLL
   RCC_PLLCmd(DISABLE);
   RCC_PLLConfig(RCC_PLLSource_HSE, m, n, p, q);

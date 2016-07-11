@@ -15,6 +15,7 @@
 #include "jsinteractive.h"
 #include "jshardware.h"
 #include "jstimer.h"
+#include "jspin.h"
 #include "jswrapper.h"
 #include "jswrap_json.h"
 #include "jswrap_io.h"
@@ -129,14 +130,12 @@ static NO_INLINE void jsiAppendToInputLine(const char *str) {
   }
 }
 
-/**
- * Change the console to a new location.
- */
-void jsiSetConsoleDevice(
-    IOEventFlags device //!< The device to use as a console.
-  ) {
-  // The `consoleDevice` is the global used to indicate which device we are using as the
-  // the console.
+void jsiSetConsoleDevice(IOEventFlags device, bool force) {
+  if (force)
+    jsiStatus |= JSIS_CONSOLE_FORCED;
+  else
+    jsiStatus &= ~JSIS_CONSOLE_FORCED;
+
   if (device == consoleDevice) return;
 
   if (!jshIsDeviceInitialised(device)) {
@@ -158,13 +157,14 @@ void jsiSetConsoleDevice(
   }
 }
 
-/**
- * Retrieve the device being used as the console.
- */
 IOEventFlags jsiGetConsoleDevice() {
   // The `consoleDevice` is the global used to hold the current console.  This function
   // encapsulates access.
   return consoleDevice;
+}
+
+bool jsiIsConsoleDeviceForced() {
+  return (jsiStatus & JSIS_CONSOLE_FORCED)!=0;
 }
 
 /**
@@ -184,7 +184,7 @@ NO_INLINE void jsiConsolePrintString(const char *str) {
   }
 }
 
-#ifdef FLASH_STR
+#ifdef USE_FLASH_MEMORY
 // internal version that copies str from flash to an internal buffer
 NO_INLINE void jsiConsolePrintString_int(const char *str) {
   size_t len = flash_strlen(str);
@@ -198,7 +198,7 @@ NO_INLINE void jsiConsolePrintString_int(const char *str) {
  * Perform a printf to the console.
  * Execute a printf command to the current JS console.
  */
-#ifndef FLASH_STR
+#ifndef USE_FLASH_MEMORY
 void jsiConsolePrintf(const char *fmt, ...) {
   va_list argp;
   va_start(argp, fmt);
@@ -376,9 +376,6 @@ void jsiConsoleReturnInputLine() {
       jsiMoveCursorChar(inputLine, jsvGetStringLength(inputLine), inputCursorPos);
     }
   }
-}
-void jsiConsolePrintPosition(struct JsLex *lex, size_t tokenPos) {
-  jslPrintPosition((vcbprintf_callback)jsiConsolePrintString, 0, tokenPos);
 }
 
 /**
@@ -643,11 +640,11 @@ void jsiDumpHardwareInitialisation(vcbprintf_callback user_callback, void *user_
     if (IS_PIN_USED_INTERNALLY(pin)) continue;
     JshPinState state = jshPinGetState(pin);
     JshPinState statem = state&JSHPINSTATE_MASK;
-    if (statem == JSHPINSTATE_GPIO_OUT || statem == JSHPINSTATE_GPIO_OUT_OPENDRAIN) {
+    if (statem == JSHPINSTATE_GPIO_OUT && !jshGetPinStateIsManual(pin)) {
       bool isOn = (state&JSHPINSTATE_PIN_IS_ON)!=0;
       if (!isOn && IS_PIN_A_LED(pin)) continue;
-      cbprintf(user_callback, user_data, "digitalWrite(%p,%d);\n",pin,isOn?1:0);
-    } else if (/*statem == JSHPINSTATE_GPIO_IN ||*/statem == JSHPINSTATE_GPIO_IN_PULLUP || statem == JSHPINSTATE_GPIO_IN_PULLDOWN) {
+      cbprintf(user_callback, user_data, "digitalWrite(%p, %d);\n",pin,isOn?1:0);
+    } else {
 #ifdef DEFAULT_CONSOLE_RX_PIN
       // the console input pin is always a pullup now - which is expected
       if (pin == DEFAULT_CONSOLE_RX_PIN &&
@@ -658,14 +655,15 @@ void jsiDumpHardwareInitialisation(vcbprintf_callback user_callback, void *user_
           statem == BTN1_PINSTATE) continue;
 #endif
       // don't bother with normal inputs, as they come up in this state (ish) anyway
-      const char *s = "";
-      if (statem == JSHPINSTATE_GPIO_IN_PULLUP) s="_pullup";
-      if (statem == JSHPINSTATE_GPIO_IN_PULLDOWN) s="_pulldown";
-      cbprintf(user_callback, user_data, "pinMode(%p,\"input%s\");\n",pin,s);
+      const char *s = 0;
+      // JSHPINSTATE_GPIO_IN is the default - don't do anything for it
+      if (statem == JSHPINSTATE_GPIO_IN_PULLUP) s="input_pullup";
+      else if (statem == JSHPINSTATE_GPIO_IN_PULLDOWN) s="input_pulldown";
+      else if (statem == JSHPINSTATE_GPIO_OUT) s="output";
+      else if (statem == JSHPINSTATE_GPIO_OUT_OPENDRAIN) s="opendrain";
+      if (s) cbprintf(user_callback, user_data, "pinMode(%p, \"%s\");\n",pin,s);
     }
 
-    if (statem == JSHPINSTATE_GPIO_OUT_OPENDRAIN)
-      cbprintf(user_callback, user_data, "pinMode(%p,\"opendrain\");\n",pin);
   }
 }
 
@@ -776,7 +774,7 @@ void jsiSemiInit(bool autoLoad) {
           " "JS_VERSION" Copyright 2016 G.Williams\n"
         // Point out about donations - but don't bug people
         // who bought boards that helped Espruino
-#if !defined(PICO) && !defined(ESPRUINOBOARD)
+#if !defined(PICO) && !defined(ESPRUINOBOARD) && !defined(ESPRUINOWIFI)
           "\n"
           "Espruino is Open Source. Our work is supported\n"
           "only by sales of official boards and donations:\n"
@@ -1071,6 +1069,18 @@ bool jsiAtEndOfInputLine() {
 
 void jsiCheckErrors() {
   JsVar *exception = jspGetException();
+  if (exception) {
+    JsVar *process = jsvObjectGetChild(execInfo.root, "process", 0);
+    if (process) {
+      JsVar *callback = jsvObjectGetChild(process, JS_EVENT_PREFIX"uncaughtException", 0);
+      if (callback) {
+        jsiExecuteEventCallback(0, callback, 1, &exception);
+        jsvUnLock2(callback, exception);
+        exception = 0;
+      }
+      jsvUnLock(process);
+    }
+  }
   if (exception) {
     jsiConsolePrintf("Uncaught %v\n", exception);
     jsvUnLock(exception);
@@ -2003,6 +2013,10 @@ void jsiIdle() {
     jsvGarbageCollect();
     jsiSetBusy(BUSY_INTERACTIVE, false);
   }
+
+  // Kick the WatchDog if needed
+  if (jsiStatus & JSIS_WATCHDOG_AUTO)
+    jshKickWatchDog();
 
   // Go to sleep!
   if (loopsIdling>1 && // once around the idle loop without having done any work already (just in case)

@@ -149,6 +149,15 @@ A loopback serial device. Data sent to LoopbackA comes out of LoopbackB and vice
 }
 A loopback serial device. Data sent to LoopbackA comes out of LoopbackB and vice versa
  */
+/*JSON{
+  "type" : "object",
+  "name" : "Telnet",
+  "instanceof" : "Serial",
+  "#if" : "defined(USE_TELNET)"
+}
+A telnet serial device that maps to the built-in telnet console server (devices that have
+built-in wifi only).
+ */
 
 
 
@@ -156,9 +165,15 @@ A loopback serial device. Data sent to LoopbackA comes out of LoopbackB and vice
   "type" : "method",
   "class" : "Serial",
   "name" : "setConsole",
-  "generate_full" : "jsiSetConsoleDevice(jsiGetDeviceFromClass(parent))"
+  "generate_full" : "jsiSetConsoleDevice(jsiGetDeviceFromClass(parent), force)",
+  "params" : [
+    ["force","bool","Whether to force the console to this port"]
+  ]
 }
-Set this Serial port as the port for the console
+Set this Serial port as the port for the JavaScript console (REPL).
+
+Unless `force` is set to true, changes in the connection state of the board
+(for instance plugging in USB) will cause the console to change.
  */
 
 /*JSON{

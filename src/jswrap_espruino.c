@@ -573,14 +573,41 @@ JsVarFloat jswrap_espruino_interpolate2d(JsVar *array, int width, JsVarFloat x, 
   "name" : "enableWatchdog",
   "generate" : "jswrap_espruino_enableWatchdog",
   "params" : [
-    ["timeout","float","The timeout in seconds before a watchdog reset"]
+    ["timeout","float","The timeout in seconds before a watchdog reset"],
+    ["isAuto","JsVar","If undefined or true, the watchdog is kicked automatically. If not, you must call `E.kickWatchdog()` yourself"]
   ]
 }
-Enable the watchdog timer. This will reset Espruino if it isn't able to return to the idle loop within the timeout. NOTE: This will not work with `setDeepSleep` unless you explicitly wake Espruino up with an interval of less than the timeout.
+Enable the watchdog timer. This will reset Espruino if it isn't able to return to the idle loop within the timeout.
+
+If `isAuto` is false, you must call `E.kickWatchdog()` yourself every so often or the chip will reset.
+
+**NOTE:** This will not work with `setDeepSleep` unless you explicitly wake Espruino up with an interval of less than the timeout.
+
+**NOTE:** This is only implemented on STM32 devices.
  */
-void jswrap_espruino_enableWatchdog(JsVarFloat time) {
+void jswrap_espruino_enableWatchdog(JsVarFloat time, JsVar *isAuto) {
   if (time<0 || isnan(time)) time=1;
+  if (jsvIsUndefined(isAuto) || jsvGetBool(isAuto))
+    jsiStatus |= JSIS_WATCHDOG_AUTO;
+  else
+    jsiStatus &= ~JSIS_WATCHDOG_AUTO;
   jshEnableWatchDog(time);
+}
+
+/*JSON{
+  "type" : "staticmethod",
+  "ifndef" : "SAVE_ON_FLASH",
+  "class" : "E",
+  "name" : "kickWatchdog",
+  "generate" : "jswrap_espruino_kickWatchdog"
+}
+Kicks a Watchdog timer set up with `E.enableWatchdog(..., false)`. See
+`E.enableWatchdog` for more information.
+
+**NOTE:** This is only implemented on STM32 devices.
+ */
+void jswrap_espruino_kickWatchdog() {
+  jshKickWatchDog();
 }
 
 /*JSON{
@@ -755,6 +782,8 @@ If `alwaysExec` is `true`, the code will be executed even after a call to
 program, but you want some code that is always built in (for instance
 setting up a display or keyboard).
 
+To remove boot code that has been saved previously, use `E.setBootCode("")`
+
 **Note:** this removes any code that was previously saved with `save()`
 */
 void jswrap_espruino_setBootCode(JsVar *code, bool alwaysExec) {
@@ -810,7 +839,7 @@ Just specify an integer value, either 80 or 160 (for 80 or 160Mhz)
 
 */
 int jswrap_espruino_setClock(JsVar *options) {
-  return jshSetSystemClock(options);
+  return (int)jshSetSystemClock(options);
 }
 
 /*JSON{
