@@ -421,7 +421,6 @@ BOARD=ISKRAJS
 STLIB=STM32F405xx
 PRECOMPILED_OBJS+=$(ROOT)/targetlibs/stm32f4/lib/startup_stm32f40_41xxx.o
 OPTIMIZEFLAGS+=-O3
-WRAPPERSOURCES+=targets/iskrajs/jswrap_iskrajs.c
 
 else ifdef STM32F3DISCOVERY
 EMBEDDED=1
@@ -1622,6 +1621,10 @@ endif
 
 ifdef NUCLEO
 WRAPPERSOURCES += targets/nucleo/jswrap_nucleo.c
+endif
+
+ifdef ISKRAJS
+WRAPPERSOURCES += targets/iskrajs/jswrap_iskrajs.c
 endif
 
 PININFOFILE=$(GENDIR)/jspininfo
