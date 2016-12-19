@@ -112,7 +112,8 @@ void jshInit() {
   jshInitDevices();
 
   // sanity check for pin function enum to catch ordering changes
-  if (JSHPINSTATE_I2C != 12 || JSHPINSTATE_GPIO_IN_PULLDOWN != 5 || JSHPINSTATE_MASK != 15) {
+  if (JSHPINSTATE_I2C != 13 || JSHPINSTATE_GPIO_IN_PULLDOWN != 6 || JSHPINSTATE_MASK != 15) {
+    //jsError("%d %d %d\n",JSHPINSTATE_I2C, JSHPINSTATE_GPIO_IN_PULLDOWN,JSHPINSTATE_MASK); 
     jsError("JshPinState #defines have changed, please update pinStateToString()");
   }
 
@@ -304,6 +305,7 @@ static uint8 pinAFFunc[] = {
 static char *pinStateToString(JshPinState state) {
   static char *states[] = {
     "UNDEFINED", "GPIO_OUT", "GPIO_OUT_OPENDRAIN",
+    "GPIO_OUT_OPENDRAIN_PULLUP",	  
     "GPIO_IN", "GPIO_IN_PULLUP", "GPIO_IN_PULLDOWN",
     "ADC_IN", "AF_OUT", "AF_OUT_OPENDRAIN",
     "USART_IN", "USART_OUT", "DAC_OUT", "I2C",
@@ -333,6 +335,7 @@ static void jshDebugPin(Pin pin) {
  * JSHPINSTATE_UNDEFINED
  * JSHPINSTATE_GPIO_OUT
  * JSHPINSTATE_GPIO_OUT_OPENDRAIN
+ * JSHPINSTATE_GPIO_OUT_OPENDRAIN_PULLUP
  * JSHPINSTATE_GPIO_IN
  * JSHPINSTATE_GPIO_IN_PULLUP
  * JSHPINSTATE_GPIO_IN_PULLDOWN
@@ -373,6 +376,7 @@ void jshPinSetState(
   switch (state) {
   case JSHPINSTATE_GPIO_OUT:
   case JSHPINSTATE_GPIO_OUT_OPENDRAIN:
+  case JSHPINSTATE_GPIO_OUT_OPENDRAIN_PULLUP:
   case JSHPINSTATE_GPIO_IN:
   case JSHPINSTATE_GPIO_IN_PULLUP:
   case JSHPINSTATE_I2C:
@@ -436,8 +440,8 @@ void jshPinSetValue(
     bool value //!< The new value of the pin.
   ) {
   //os_printf("> ESP8266: jshPinSetValue pin=%d, value=%d\n", pin, value);
-  GPIO_REG_WRITE(GPIO_OUT_W1TS_ADDRESS, (value&1)<<pin);
-  GPIO_REG_WRITE(GPIO_OUT_W1TC_ADDRESS, (!value)<<pin);
+  if (value & 1) GPIO_REG_WRITE(GPIO_OUT_W1TS_ADDRESS, 1<<pin);
+  else           GPIO_REG_WRITE(GPIO_OUT_W1TC_ADDRESS, 1<<pin);
   //jshDebugPin(pin);
 }
 
@@ -867,15 +871,15 @@ void jshSPISetReceive(IOEventFlags device, bool isReceive) {
 
 //===== I2C =====
 
-/** Set-up I2C master for ESP8266, default pins are SCL:14, SDA:2. Only device I2C1 is supported
+/** Set-up I2C master for ESP8266, default pins are SCL:12, SDA:13. Only device I2C1 is supported
  *  and only master mode. */
 void jshI2CSetup(IOEventFlags device, JshI2CInfo *info) {
   //os_printf("> jshI2CSetup: SCL=%d SDA=%d bitrate=%d\n",
   //    info->pinSCL, info->pinSDA, info->bitrate);
   if (device != EV_I2C1) {
     jsError("Only I2C1 supported"); return; }
-  Pin scl = info->pinSCL !=PIN_UNDEFINED ? info->pinSCL : 14;
-  Pin sda = info->pinSDA !=PIN_UNDEFINED ? info->pinSDA : 2;
+  Pin scl = info->pinSCL != PIN_UNDEFINED ? info->pinSCL : 12;
+  Pin sda = info->pinSDA != PIN_UNDEFINED ? info->pinSDA : 13;
 
   jshPinSetState(scl, JSHPINSTATE_I2C);
   jshPinSetState(sda, JSHPINSTATE_I2C);
@@ -1150,12 +1154,12 @@ unsigned int jshGetRandomNumber() {
 /**
  * Determine available flash depending on EEprom size
  *
- */  
+ */
 uint32_t jshFlashMax() {
-  extern uint16_t espFlashKB; 
+  extern uint16_t espFlashKB;
   return 1024*espFlashKB;
 }
-  
+
 /**
  * Read data from flash memory into the buffer.
  *

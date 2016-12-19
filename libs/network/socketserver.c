@@ -194,7 +194,7 @@ void _socketConnectionKill(JsNetwork *net, JsVar *connection) {
   int sckt = (int)jsvGetIntegerAndUnLock(jsvObjectGetChild(connection,HTTP_NAME_SOCKET,0))-1; // so -1 if undefined
   if (sckt>=0) {
     netCloseSocket(net, sckt);
-    jsvObjectSetChild(connection,HTTP_NAME_SOCKET,0);
+    jsvObjectRemoveChild(connection,HTTP_NAME_SOCKET);
   }
 }
 
@@ -413,6 +413,8 @@ bool socketServerConnectionsIdle(JsNetwork *net) {
       bool hadError = fireErrorEvent(error, connection, socket);
 
       // fire the close listeners
+      jsiQueueObjectCallbacks(connection, HTTP_NAME_ON_END, NULL, 0);
+      jsiQueueObjectCallbacks(socket, HTTP_NAME_ON_END, NULL, 0);
       JsVar *params[1] = { jsvNewFromBool(hadError) };
       jsiQueueObjectCallbacks(connection, HTTP_NAME_ON_CLOSE, params, 1);
       jsiQueueObjectCallbacks(socket, HTTP_NAME_ON_CLOSE, params, 1);
@@ -439,7 +441,7 @@ void socketClientPushReceiveData(JsVar *connection, JsVar *socket, JsVar **recei
     if (jsvIsEmptyString(*receiveData) ||
         jswrap_stream_pushData(socket, *receiveData, false)) {
       // clear - because we have issued a callback
-      jsvObjectSetChild(connection,HTTP_NAME_RECEIVE_DATA,0);
+      jsvObjectRemoveChild(connection,HTTP_NAME_RECEIVE_DATA);
       jsvUnLock(*receiveData);
       *receiveData = 0;
     }
@@ -576,6 +578,7 @@ bool socketClientConnectionsIdle(JsNetwork *net) {
         bool hadError = fireErrorEvent(error, connection, NULL);
 
         // close callback must happen after error callback
+        jsiQueueObjectCallbacks(socket, HTTP_NAME_ON_END, NULL, 0);
         JsVar *params[1] = { jsvNewFromBool(hadError) };
         jsiQueueObjectCallbacks(socket, HTTP_NAME_ON_CLOSE, params, 1);
         jsvUnLock(params[0]);

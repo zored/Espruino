@@ -238,6 +238,16 @@ void jsvStringIteratorAppend(JsvStringIterator *it, char ch) {
   jsvSetCharactersInVar(it->var, it->charsInVar);
 }
 
+void jsvStringIteratorAppendString(JsvStringIterator *it, JsVar *str) {
+  JsvStringIterator sit;
+  jsvStringIteratorNew(&sit, str, 0);
+  while (jsvStringIteratorHasChar(&sit)) {
+    jsvStringIteratorAppend(it, jsvStringIteratorGetChar(&sit));
+    jsvStringIteratorNext(&sit);
+  }
+  jsvStringIteratorFree(&sit);
+}
+
 // --------------------------------------------------------------------------------------------
 
 void jsvObjectIteratorNew(JsvObjectIterator *it, JsVar *obj) {
@@ -319,7 +329,7 @@ static JsVarInt jsvArrayBufferIteratorDataToInt(JsvArrayBufferIterator *it, char
   JsVarInt v = 0;
   if (dataLen==1) v = *(int8_t*)data;
   else if (dataLen==2) v = *(short*)data;
-  else if (dataLen==4) v = *(int*)data;
+  else if (dataLen==4) return *(int*)data;
   else assert(0);
   if ((!JSV_ARRAYBUFFER_IS_SIGNED(it->type)))
     v = v & (JsVarInt)((1UL << (8*dataLen))-1);

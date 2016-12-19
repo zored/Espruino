@@ -23,7 +23,7 @@ info = {
  'default_console_tx' : "D9",
  'default_console_rx' : "D11",
  'default_console_baudrate' : "9600",
- 'variables' : 1050, # How many variables are allocated for Espruino to use. RAM will be overflowed if this number is too high and code won't compile.
+ 'variables' : 1050,
  'binary_name' : 'espruino_%v_nrf51822.bin',
  'build' : {
   'defines' : [
@@ -39,10 +39,10 @@ chip = {
   'ram' : 32,
   'flash' : 256,
   'speed' : 16,
-  'usart' : 1, #THIS IS INCORRECT!!!
-  'spi' : 3,
-  'i2c' : 2,
-  'adc' : 1,
+  'usart' : 1,
+  'spi' : 1,
+  'i2c' : 1,
+  'adc' : 0,
   'dac' : 0,
    # If using DFU bootloader, it sits at 0x3C000 - 0x40000 (0x40000 is end of flash)
    # Might want to change 256 -> 240 in the code below
@@ -50,19 +50,19 @@ chip = {
     'address' : ((256 - 3) * 1024),
     'page_size' : 1024,
     'pages' : 3,
-    'flash_available' : (256 - 108 - 16) # total flash pages - softdevice - bootloader
+    'flash_available' : (256 - 108 - 3)
   }
 };
 
 devices = {
-  'LED1' : { 'pin' : 'D21' },
-  'LED2' : { 'pin' : 'D22' },
-  'LED3' : { 'pin' : 'D23' },
-  'LED4' : { 'pin' : 'D24' },
-  'BTN1' : { 'pin' : 'D17'},
-  'BTN2' : { 'pin' : 'D18'},
-  'BTN3' : { 'pin' : 'D19'},
-  'BTN4' : { 'pin' : 'D20'},
+  'LED1' : { 'pin' : 'D21', 'inverted' : True },
+  'LED2' : { 'pin' : 'D22', 'inverted' : True },
+  'LED3' : { 'pin' : 'D23', 'inverted' : True },
+  'LED4' : { 'pin' : 'D24', 'inverted' : True },
+  'BTN1' : { 'pin' : 'D17', 'inverted' : True, 'pinstate' : 'IN_PULLUP'},
+  'BTN2' : { 'pin' : 'D18', 'inverted' : True, 'pinstate' : 'IN_PULLUP'},
+  'BTN3' : { 'pin' : 'D19', 'inverted' : True, 'pinstate' : 'IN_PULLUP'},
+  'BTN4' : { 'pin' : 'D20', 'inverted' : True, 'pinstate' : 'IN_PULLUP'},
   'RX_PIN_NUMBER' : { 'pin' : 'D11'},
   'TX_PIN_NUMBER' : { 'pin' : 'D9'},
   'CTS_PIN_NUMBER' : { 'pin' : 'D10'},

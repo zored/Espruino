@@ -61,7 +61,7 @@ Use the STM32's internal thermistor to work out the temperature.
 While this is implemented on Espruino boards, it may not be implemented on other devices. If so it'll return NaN.
 
  **Note:** This is not entirely accurate and varies by a few degrees from chip to chip. It measures the **die temperature**, so when connected to USB it could be reading 10 over degrees C above ambient temperature. When running from battery with `setDeepSleep(true)` it is much more accurate though.
- */
+*/
 
 /*JSON{
   "type" : "staticmethod",
@@ -115,7 +115,7 @@ int nativeCallGetCType() {
 }
 ADVANCED: This is a great way to crash Espruino if you're not sure what you are doing
 
-Create a native function that executes the code at the given address. Eg. `E.nativeCall(0x08012345,'double (double,double)')(1.1, 2.2)` 
+Create a native function that executes the code at the given address. Eg. `E.nativeCall(0x08012345,'double (double,double)')(1.1, 2.2)`
 
 If you're executing a thumb function, you'll almost certainly need to set the bottom bit of the address to 1.
 
@@ -881,6 +881,21 @@ void jswrap_espruino_dumpTimers() {
 
 /*JSON{
   "type" : "staticmethod",
+  "class" : "E",
+  "name" : "dumpLockedVars",
+  "ifndef" : "RELEASE",
+  "generate" : "jswrap_espruino_dumpLockedVars"
+}
+Dump any locked variables that aren't referenced from `global` - for debugging memory leaks only.
+*/
+#ifndef RELEASE
+void jswrap_espruino_dumpLockedVars() {
+  jsvDumpLockedVars();
+}
+#endif
+
+/*JSON{
+  "type" : "staticmethod",
   "ifndef" : "SAVE_ON_FLASH",
   "class" : "E",
   "name" : "getSizeOf",
@@ -902,7 +917,7 @@ children.
 
 For instance `E.getSizeOf(function(a,b) { })` returns `5`.
 
-But `E.getSizeOf(E.getSizeOf(function(a,b) { }), 1)` returns:
+But `E.getSizeOf(function(a,b) { }, 1)` returns:
 
 ```
  [
@@ -962,7 +977,7 @@ JsVar *jswrap_espruino_getSizeOf(JsVar *v, int depth) {
     ["bits","int","If specified, the number of bits per element"]
   ]
 }
-Take each element of the `from` array, look it up in `map` (or call the 
+Take each element of the `from` array, look it up in `map` (or call the
 function with it as a first argument), and write it into the corresponding
 element in the `to` array.
  */
@@ -1127,7 +1142,8 @@ JsVarInt jswrap_espruino_HSBtoRGB(JsVarFloat hue, JsVarFloat sat, JsVarFloat bri
   ]
 }
 Set a password on the console (REPL). When powered on, Espruino will
-then demand a password before the console can be used.
+then demand a password before the console can be used. If you want to
+lock the console immediately after this you can call `"E.lockConsole()`
 
 To remove the password, call this function with no arguments.
 
@@ -1143,6 +1159,22 @@ void jswrap_espruino_setPassword(JsVar *pwd) {
   if (pwd)
     pwd = jsvAsString(pwd, false);
   jsvUnLock(jsvObjectSetChild(execInfo.hiddenRoot, PASSWORD_VARIABLE_NAME, pwd));
+}
+
+/*JSON{
+  "type" : "staticmethod",
+  "class" : "E",
+  "name" : "lockConsole",
+  "generate" : "jswrap_espruino_lockConsole"
+}
+If a password has been set with `E.setPassword()`, this will lock the console
+so the password needs to be entered to unlock it.
+*/
+void jswrap_espruino_lockConsole() {
+  JsVar *pwd = jsvObjectGetChild(execInfo.hiddenRoot, PASSWORD_VARIABLE_NAME, 0);
+  if (pwd)
+    jsiStatus |= JSIS_PASSWORD_PROTECTED;
+  jsvUnLock(pwd);
 }
 
 // ----------------------------------------- USB Specific Stuff
@@ -1167,7 +1199,7 @@ this function.
 void jswrap_espruino_setUSBHID(JsVar *arr) {
   if (jsvIsUndefined(arr)) {
     // Disable HID
-    jsvObjectSetChild(execInfo.hiddenRoot, JS_USB_HID_VAR_NAME, 0);
+    jsvObjectRemoveChild(execInfo.hiddenRoot, JS_USB_HID_VAR_NAME);
     return;
   }
   if (!jsvIsObject(arr)) {

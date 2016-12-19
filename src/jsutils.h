@@ -26,9 +26,9 @@
 #include <math.h>
 
 #ifndef BUILDNUMBER
-#define JS_VERSION "1v86"
+#define JS_VERSION "1v90"
 #else
-#define JS_VERSION "1v86." BUILDNUMBER
+#define JS_VERSION "1v90." BUILDNUMBER
 #endif
 /*
   In code:
@@ -446,6 +446,13 @@ void cbprintf(vcbprintf_callback user_callback, void *user_data, const char *fmt
 
 /// a snprintf replacement so mbedtls doesn't try and pull in the whole stdlib to cat two strings together
 int espruino_snprintf( char * s, size_t n, const char * fmt, ... );
+
+//#define RAND_MAX (0x7FFFFFFFU) // needs to be unsigned!
+
+/// a rand() replacement that doesn't need malloc (!!!)
+int rand();
+/// a rand() replacement that doesn't need malloc (!!!)
+void srand(unsigned int seed);
 
 /** get the amount of free stack we have, in bytes */
 size_t jsuGetFreeStack();

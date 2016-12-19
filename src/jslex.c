@@ -170,7 +170,7 @@ const jslJumpTableEnum jslJumpTable[jslJumpTableEnd+1-jslJumpTableStart] = {
     JSLJT_TOPHAT, // ^
     JSLJT_ID, // _
     // 96
-    JSLJT_SINGLECHAR, // `
+    JSLJT_STRING, // `
     JSLJT_ID, // A lowercase
     JSLJT_ID, // B lowercase
     JSLJT_ID, // C lowercase
@@ -268,6 +268,7 @@ void jslGetNextToken() {
       break;
       case 'c': if (jslIsToken("case", 1)) lex->tk = LEX_R_CASE;
       else if (jslIsToken("catch", 1)) lex->tk = LEX_R_CATCH;
+      else if (jslIsToken("const", 1)) lex->tk = LEX_R_CONST;
       else if (jslIsToken("continue", 1)) lex->tk = LEX_R_CONTINUE;
       break;
       case 'd': if (jslIsToken("default", 1)) lex->tk = LEX_R_DEFAULT;
@@ -285,6 +286,8 @@ void jslGetNextToken() {
       case 'i': if (jslIsToken("if", 1)) lex->tk = LEX_R_IF;
       else if (jslIsToken("in", 1)) lex->tk = LEX_R_IN;
       else if (jslIsToken("instanceof", 1)) lex->tk = LEX_R_INSTANCEOF;
+      break;
+      case 'l': if (jslIsToken("let", 1)) lex->tk = LEX_R_LET;
       break;
       case 'n': if (jslIsToken("new", 1)) lex->tk = LEX_R_NEW;
       else if (jslIsToken("null", 1)) lex->tk = LEX_R_NULL;
@@ -421,6 +424,10 @@ void jslGetNextToken() {
             }
             jslTokenAppendChar(ch);
             jsvStringIteratorAppend(&it, ch);
+          } else if (lex->currCh=='\n' && delim!='`') {
+            /* Was a newline - this is now allowed
+             * unless we're a template string */
+            break;
           } else {
             jslTokenAppendChar(lex->currCh);
             jsvStringIteratorAppend(&it, lex->currCh);
@@ -428,7 +435,10 @@ void jslGetNextToken() {
           }
         }
         jsvStringIteratorFree(&it);
-        lex->tk = lex->currCh==delim ? LEX_STR : LEX_UNFINISHED_STR;
+        if (lex->currCh==delim) {
+          lex->tk =  delim=='`' ? LEX_TEMPLATE_LITERAL : LEX_STR;
+        } else
+          lex->tk =  delim=='`' ? LEX_UNFINISHED_TEMPLATE_LITERAL : LEX_UNFINISHED_STR;
         jslGetNextCh();
       } break;
       case JSLJT_EXCLAMATION: jslSingleChar();
@@ -500,6 +510,9 @@ void jslGetNextToken() {
           lex->tk = LEX_TYPEEQUAL;
           jslGetNextCh();
         }
+      } else if (lex->currCh=='>') { // =>
+        lex->tk = LEX_ARROW_FUNCTION;
+        jslGetNextCh();
       } break;
       case JSLJT_LESSTHAN: jslSingleChar();
       if (lex->currCh=='=') { // <=
@@ -618,7 +631,10 @@ void jslTokenAsString(int token, char *str, size_t len) {
   case LEX_INT : strncpy(str, "INT", len); return;
   case LEX_FLOAT : strncpy(str, "FLOAT", len); return;
   case LEX_STR : strncpy(str, "STRING", len); return;
+  case LEX_TEMPLATE_LITERAL : strncpy(str, "TEMPLATE LITERAL", len); return;
   case LEX_UNFINISHED_STR : strncpy(str, "UNFINISHED STRING", len); return;
+  case LEX_UNFINISHED_TEMPLATE_LITERAL : strncpy(str, "UNFINISHED TEMPLATE LITERAL", len); return;
+  case LEX_UNFINISHED_COMMENT : strncpy(str, "UNFINISHED COMMENT", len); return;
   }
   if (token>=LEX_EQUAL && token<LEX_R_LIST_END) {
     const char tokenNames[] =
@@ -646,6 +662,7 @@ void jslTokenAsString(int token, char *str, size_t len) {
         /* LEX_OREQUAL :      */ "|=\0"
         /* LEX_OROR :         */ "||\0"
         /* LEX_XOREQUAL :     */ "^=\0"
+        /* LEX_ARROW_FUNCTION */ "=>\0"
 
         // reserved words
         /*LEX_R_IF :       */ "if\0"
@@ -658,6 +675,8 @@ void jslTokenAsString(int token, char *str, size_t len) {
         /*LEX_R_FUNCTION   */ "function\0"
         /*LEX_R_RETURN     */ "return\0"
         /*LEX_R_VAR :      */ "var\0"
+        /*LEX_R_LET :      */ "let\0"
+        /*LEX_R_CONST :    */ "const\0"
         /*LEX_R_THIS :     */ "this\0"
         /*LEX_R_THROW :    */ "throw\0"
         /*LEX_R_TRY :      */ "try\0"

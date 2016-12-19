@@ -47,10 +47,10 @@ chip = {
   'adc' : 1,
   'dac' : 0,
   'saved_code' : {
-    'address' : ((128 - 3) * 4096),
+    'address' : ((120 - 3) * 4096), # Bootloader takes pages 120-127
     'page_size' : 4096,
-    'pages' : 0,
-    'flash_available' : (512 - 108 - 24) # Total flash - softdevice - bootloader (this one is code signed unlike nrF51).
+    'pages' : 3,
+    'flash_available' : 512 - ((31 + 8 + 3)*4) # Softdevice uses 31 pages of flash, bootloader 8, code 3. Each page is 4 kb. 
   },
 };
 
@@ -59,10 +59,10 @@ devices = {
   'LED2' : { 'pin' : 'D18', 'inverted' : True },
   'LED3' : { 'pin' : 'D19', 'inverted' : True },
   'LED4' : { 'pin' : 'D20', 'inverted' : True },
-  'BTN1' : { 'pin' : 'D13', 'inverted' : True },
-  'BTN2' : { 'pin' : 'D14', 'inverted' : True },
-  'BTN3' : { 'pin' : 'D15', 'inverted' : True },
-  'BTN4' : { 'pin' : 'D16', 'inverted' : True },
+  'BTN1' : { 'pin' : 'D13', 'inverted' : True, 'pinstate' : 'IN_PULLUP' },
+  'BTN2' : { 'pin' : 'D14', 'inverted' : True, 'pinstate' : 'IN_PULLUP' },
+  'BTN3' : { 'pin' : 'D15', 'inverted' : True, 'pinstate' : 'IN_PULLUP' },
+  'BTN4' : { 'pin' : 'D16', 'inverted' : True, 'pinstate' : 'IN_PULLUP' },
   'RX_PIN_NUMBER' : { 'pin' : 'D8'},
   'TX_PIN_NUMBER' : { 'pin' : 'D6'},
   'CTS_PIN_NUMBER' : { 'pin' : 'D7'},
