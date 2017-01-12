@@ -96,6 +96,8 @@ if not LINUX:
     flash_page_size = 4*1024
   if board.chip["family"]=="EFM32GG":
     flash_page_size = 4*1024
+  if board.chip["family"]=="STM32L4":
+    flash_page_size = 128*1024
   flash_saved_code_pages = round((flash_needed+flash_page_size-1)/flash_page_size + 0.5) #Needs to be a full page, so we're rounding up
   # F4 has different page sizes in different places
   total_flash = board.chip["flash"]*1024
@@ -189,6 +191,11 @@ elif board.chip["family"]=="STM32F4":
   codeOut('#include "stm32f4xx.h"')
   codeOut('#include "stm32f4xx_conf.h"')
   codeOut("#define STM32API2 // hint to jshardware that the API is a lot different")
+elif board.chip["family"]=="STM32L4":
+  board.chip["class"]="STM32_LL"
+  codeOut('#include "stm32l4xx_ll_bus.h"')
+  codeOut('#include "stm32l4xx_ll_rcc.h"')
+  codeOut('#include "stm32l4xx_ll_adc.h"')
 elif board.chip["family"]=="NRF51":
   board.chip["class"]="NRF51"
   codeOut('#include "nrf.h"')
@@ -234,6 +241,7 @@ codeOut("""
 #define DEFAULT_SLEEP_PIN_INDICATOR (Pin)-1 // no indicator
 """);
 
+
 if 'default_busy_pin_indicator' in board.info:
     codeOut("#define DEFAULT_BUSY_PIN_INDICATOR " + toPinDef(board.info['default_busy_pin_indicator']))
 else:
@@ -248,6 +256,14 @@ if board.chip["class"]=="STM32":
 #define UTIL_TIMER_IRQn TIM5_IRQn
 #define UTIL_TIMER_IRQHandler TIM5_IRQHandler
 #define UTIL_TIMER_APB1 RCC_APB1Periph_TIM5
+""")
+  elif (board.chip["part"][:9]=="STM32L476"):
+   codeOut("""
+// Used by various pins, but always with other options
+#define UTIL_TIMER TIM5
+#define UTIL_TIMER_IRQn TIM5_IRQn
+#define UTIL_TIMER_IRQHandler TIM5_IRQHandler
+#define UTIL_TIMER_APB1 LL_APB1_GRP1_PERIPH_TIM5
 """)
   elif "subfamily" in board.chip and board.chip["subfamily"]=="MD":
 
@@ -296,7 +312,10 @@ else:
   codeOut("")
   codeOut("#define FLASH_SAVED_CODE_START            "+str(flash_saved_code_start))
   codeOut("#define FLASH_SAVED_CODE_LENGTH           "+str(int(flash_page_size*flash_saved_code_pages)))
-  codeOut("#define FLASH_MAGIC_LOCATION              (FLASH_SAVED_CODE_START + FLASH_SAVED_CODE_LENGTH - 4)")
+  if board.chip["family"]=="STM32L4":
+    codeOut("#define FLASH_MAGIC_LOCATION              (FLASH_SAVED_CODE_START + FLASH_SAVED_CODE_LENGTH - 8)")
+  else:
+    codeOut("#define FLASH_MAGIC_LOCATION              (FLASH_SAVED_CODE_START + FLASH_SAVED_CODE_LENGTH - 4)")
   codeOut("#define FLASH_MAGIC 0xDEADBEEF")
 codeOut("");
 codeOut("#define USART_COUNT                          "+str(board.chip["usart"]))
