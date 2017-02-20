@@ -164,6 +164,9 @@ codeOut("#define PC_BOARD_ID \""+boardname+"\"")
 codeOut("#define PC_BOARD_CHIP \""+board.chip["part"]+"\"")
 codeOut("#define PC_BOARD_CHIP_FAMILY \""+board.chip["family"]+"\"")
 
+if "json_url" in board.info:
+    codeOut('#define PC_JSON_URL "{0}"'.format(board.info['json_url']))
+
 codeOut("")
 
 linker_end_var = "_end";
@@ -230,17 +233,21 @@ codeOut("""
 #define SYSTICK_RANGE 0x1000000 // the Maximum (it is a 24 bit counter) - on Olimexino this is about 0.6 sec
 #define SYSTICKS_BEFORE_USB_DISCONNECT 2
 
-#define DEFAULT_BUSY_PIN_INDICATOR (Pin)-1 // no indicator
-#define DEFAULT_SLEEP_PIN_INDICATOR (Pin)-1 // no indicator
-
 // When to send the message that the IO buffer is getting full
 #define IOBUFFER_XOFF ((TXBUFFERMASK)*6/8)
 // When to send the message that we can start receiving again
 #define IOBUFFER_XON ((TXBUFFERMASK)*3/8)
 
+#define DEFAULT_SLEEP_PIN_INDICATOR (Pin)-1 // no indicator
 """);
 
-if (board.chip["class"]=="STM32") | (board.chip["class"]=="STM32_LL"):
+
+if 'default_busy_pin_indicator' in board.info:
+    codeOut("#define DEFAULT_BUSY_PIN_INDICATOR " + toPinDef(board.info['default_busy_pin_indicator']))
+else:
+    codeOut("#define DEFAULT_BUSY_PIN_INDICATOR (Pin)-1 // no indicator")
+
+if board.chip["class"]=="STM32":
   if (board.chip["part"][:9]=="STM32F401") | (board.chip["part"][:9]=="STM32F411"):
 # FIXME - need to remove TIM5 from jspininfo
    codeOut("""
@@ -407,6 +414,12 @@ for device in ["USB","SD","LCD","JTAG","ESP8266","IR"]:
   if device in board.devices:
     for entry in board.devices[device]:
       if entry[:3]=="pin": usedPinChecks.append("(PIN)==" + toPinDef(board.devices[device][entry])+"/* "+device+" */")
+
+
+# Dump pin definitions
+for p in pins:
+    rawName = p['name'].lstrip('P')
+    codeOut('#define {0}_PININDEX {1}'.format(rawName, toPinDef(rawName)))
 
 # Specific hacks for nucleo boards
 if "NUCLEO_A" in board.devices:

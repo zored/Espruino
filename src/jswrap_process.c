@@ -85,6 +85,9 @@ JsVar *jswrap_process_env() {
   jsvObjectSetChildAndUnLock(obj, "GIT_COMMIT", jsvNewFromString(STRINGIFY(GIT_COMMIT)));
 #endif
   jsvObjectSetChildAndUnLock(obj, "BOARD", jsvNewFromString(PC_BOARD_ID));
+#ifdef PC_JSON_URL
+  jsvObjectSetChildAndUnLock(obj, "JSON_URL", jsvNewFromString(PC_JSON_URL));
+#endif
 #if !defined(SAVE_ON_FLASH)
   jsvObjectSetChildAndUnLock(obj, "CHIP", jsvNewFromString(PC_BOARD_CHIP));
   jsvObjectSetChildAndUnLock(obj, "CHIP_FAMILY", jsvNewFromString(PC_BOARD_CHIP_FAMILY));

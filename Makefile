@@ -45,6 +45,7 @@
 # MINISTM32_STRIVE=1
 # MINISTM32_ANGLED_VE=1
 # MINISTM32_ANGLED_VG=1
+# ISKRAJS=1
 # ESP8266_BOARD=1         # ESP8266
 # EFM32GGSTK=1            # Currently only works with DEBUG=1
 # EMW3165=1               # MXCHIP EMW3165: STM32F411CE, BCM43362, 512KB flash 128KB RAM
@@ -88,6 +89,7 @@ endif
 INCLUDE=-I$(ROOT) -I$(ROOT)/targets -I$(ROOT)/src -I$(GENDIR)
 LIBS=
 DEFINES=
+WRAPPERSOURCES=
 CFLAGS=-Wall -Wextra -Wconversion -Werror=implicit-function-declaration -fno-strict-aliasing
 LDFLAGS=-Winline
 OPTIMIZEFLAGS=
@@ -428,6 +430,21 @@ BOARD=STM32F429IDISCOVERY
 STLIB=STM32F429xx
 PRECOMPILED_OBJS+=$(ROOT)/targetlibs/stm32f4/lib/startup_stm32f429_439xx.o
 OPTIMIZEFLAGS+=-O3
+
+else ifdef ISKRAJS
+EMBEDDED=1
+USE_USB_HID=1
+USE_NET=1
+USE_GRAPHICS=1
+USE_FILESYSTEM=1
+WIZNET=1
+USE_CRYPTO=1
+USE_TLS=1
+DEFINES += -DUSE_USB_OTG_FS=1
+BOARD=ISKRAJS
+STLIB=STM32F405xx
+PRECOMPILED_OBJS+=$(ROOT)/targetlibs/stm32f4/lib/startup_stm32f40_41xxx.o
+OPTIMIZEFLAGS+=-O3 -std=c11
 
 else ifdef STM32F3DISCOVERY
 EMBEDDED=1
@@ -1788,6 +1805,10 @@ endif
 
 ifdef NUCLEO
 WRAPPERSOURCES += targets/nucleo/jswrap_nucleo.c
+endif
+
+ifdef ISKRAJS
+WRAPPERSOURCES += targets/iskrajs/jswrap_iskrajs.c
 endif
 
 PININFOFILE=$(GENDIR)/jspininfo
