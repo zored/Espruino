@@ -846,7 +846,8 @@ void clientRequestConnect(JsNetwork *net, JsVar *httpClientReqVar) {
 
   int sckt =  netCreateSocket(net, host_addr, port, flags, options);
   if (sckt<0) {
-    jsError("Unable to create socket\n");
+    jsExceptionHere(JSET_INTERNALERROR, "Unable to create socket\n");
+    // jsError("Unable to create socket\n");
     // As this is already in the list of connections, an error will be thrown on idle anyway
     jsvObjectSetChildAndUnLock(httpClientReqVar, HTTP_NAME_CLOSENOW, jsvNewFromBool(true));
   } else {

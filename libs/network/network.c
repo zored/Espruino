@@ -530,7 +530,7 @@ bool ssl_newSocketData(int sckt, JsVar *options) {
   sd->sckt = sckt;
   sd->connecting = true;
 
-  jsiConsolePrintf( "Connecting with TLS...\n" );
+  // jsiConsolePrintf( "Connecting with TLS...\n" );
 
   int ret;
 
@@ -589,7 +589,8 @@ bool ssl_newSocketData(int sckt, JsVar *options) {
 
   if (( ret = mbedtls_ssl_setup( &sd->ssl, &sd->conf )) != 0) {
     JsVar *e = jswrap_crypto_error_to_jsvar(ret);
-    jsError("Failed! mbedtls_ssl_setup: %v\n", e );
+    jsExceptionHere(JSET_INTERNALERROR, "Failed! mbedtls_ssl_setup: %v\n", e );
+    // jsError("Failed! mbedtls_ssl_setup: %v\n", e );
     jsvUnLock(e);
     ssl_freeSocketData(sckt);
     return false;
@@ -605,7 +606,7 @@ bool ssl_newSocketData(int sckt, JsVar *options) {
 
   mbedtls_ssl_set_bio( &sd->ssl, &sd->sckt, ssl_send, ssl_recv, NULL );
 
-  jsiConsolePrintf("Performing the SSL/TLS handshake...\n" );
+  // jsiConsolePrintf("Performing the SSL/TLS handshake...\n" );
 
   return true;
 }
@@ -630,21 +631,23 @@ SSLSocketData *ssl_getSocketData(int sckt) {
     if ( ( ret = mbedtls_ssl_handshake( &sd->ssl ) ) != 0 ) {
       if( ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE ) {
         JsVar *e = jswrap_crypto_error_to_jsvar(ret);
-        jsError( "Failed! mbedtls_ssl_handshake returned %v\n", e );
+        jsExceptionHere(JSET_INTERNALERROR, "Failed! mbedtls_ssl_handshake returned %v\n", e);
+        // jsError( "Failed! mbedtls_ssl_handshake returned %v\n", e );
         jsvUnLock(e);
         return 0; // this signals an error
       }
       // else we just continue - connecting=true so other things should wait
     } else {
       // Verify the server certificate
-      jsiConsolePrintf("Verifying peer X.509 certificate...\n");
+      // jsiConsolePrintf("Verifying peer X.509 certificate...\n");
 
       /* In real life, we probably want to bail out when ret != 0 */
       uint32_t flags;
       if( ( flags = mbedtls_ssl_get_verify_result( &sd->ssl ) ) != 0 ) {
         char vrfy_buf[512];
         mbedtls_x509_crt_verify_info( vrfy_buf, sizeof( vrfy_buf ), "  ! ", flags );
-        jsError("Failed! %s\n", vrfy_buf );
+        jsExceptionHere(JSET_INTERNALERROR, "Failed! %s\n", vrfy_buf );
+        // jsError("Failed! %s\n", vrfy_buf );
         return 0;
       }
       sd->connecting = false;
