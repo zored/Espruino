@@ -26,7 +26,7 @@ info = {
      'GRAPHICS',
      'FILESYSTEM',
      'CRYPTO','SHA256','SHA512',
-     'TLS',     
+     'TLS',
      'TELNET',
    ],
    'makefile' : [

@@ -1060,12 +1060,12 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context) {
 
         break;
 
-      case BLE_GAP_EVT_RSSI_CHANGED: 
+      case BLE_GAP_EVT_RSSI_CHANGED:
 #if CENTRAL_LINK_COUNT>0
         if (m_central_conn_handle == p_ble_evt->evt.gap_evt.conn_handle) {
           jsble_queue_pending(BLEP_RSSI_CENTRAL, p_ble_evt->evt.gap_evt.params.rssi_changed.rssi);
         } else
-#endif    
+#endif
         {
           jsble_queue_pending(BLEP_RSSI_PERIPH, p_ble_evt->evt.gap_evt.params.rssi_changed.rssi);
         }
@@ -2495,7 +2495,7 @@ void jsble_send_hid_input_report(uint8_t *data, int length) {
   if (bleStatus & BLE_IS_SENDING_HID) {
     jsExceptionHere(JSET_ERROR, "BLE HID already sending");
     return;
-  }  
+  }
   if (length > HID_KEYS_MAX_LEN) {
     jsExceptionHere(JSET_ERROR, "BLE HID report too long - max length = %d\n", HID_KEYS_MAX_LEN);
     return;

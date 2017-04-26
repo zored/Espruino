@@ -23,6 +23,7 @@ IMGFILE=espruino_iskrajs_full.bin
 rm -f $ESPRUINOFILE $BOOTLOADERFILE $IMGFILE
 
 export ISKRAJS=1
+export BOARD=ISKRAJS
 # export USB_PRODUCT_ID=0x5741 # For test harness board only
 # export DEBUG=1
 export RELEASE=1

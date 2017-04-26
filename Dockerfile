@@ -4,7 +4,7 @@
 #   But honestly if you're on linux you should just save yourself
 #   gigabytes of downloads and disk space and build Espruino directly.
 #
-# 1: Build the container image 
+# 1: Build the container image
 #
 #   docker build . -t img_name
 #
@@ -13,7 +13,7 @@
 #   docker run -e BOARD='PICO_R1_3' --name container_name img_name
 #
 # This will run the container and save build results into the container's filesystem.
-# Near the end of the build the filename will be displayed, for example espruino_2v00_pico_1r3.bin 
+# Near the end of the build the filename will be displayed, for example espruino_2v00_pico_1r3.bin
 #
 # 3: Copy build results from the container into your filesystem
 #

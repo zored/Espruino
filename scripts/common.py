@@ -123,7 +123,7 @@ def get_jsondata(is_for_document, parseArgs = True, board = False):
           else:
             print("Unknown command-line option")
             exit(1)
-        elif arg[-2:]==".c": 
+        elif arg[-2:]==".c":
           # C file, all good
           explicit_files = True
           jswraps.append(arg)

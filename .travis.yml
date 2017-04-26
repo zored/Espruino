@@ -49,6 +49,7 @@ env:
     - BOARD=STM32L496GDISCOVERY
     - BOARD=RAK8211
     - BOARD=RAK8212
+    - BOARD=EFM32GGSTK
 
 script: make
 

@@ -25,7 +25,7 @@ end
 define asm
   set  disassemble-next-line on
   show disassemble-next-line
-  echo now use stepi 
+  echo now use stepi
 end
 # Watchdog timer off for NRF52 devices
 define wdt_off
