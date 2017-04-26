@@ -26,6 +26,25 @@ info = {
     'images_url_base': 'http://js.amperka.ru/img/',
     'binaries_url_base': 'http://js.amperka.ru/binaries/',
     'json_url': 'http://js.amperka.ru/json/ISKRAJS.json',
+
+    'build' : {
+        'optimizeflags' : '-Os -std=c11',
+        'libraries' : [
+            'USB_HID',
+            'NET',
+            'GRAPHICS',
+            'FILESYSTEM',
+            'WIZNET',
+            'CRYPTO',
+            'NEOPIXEL',
+            'TLS'
+        ],
+        'makefile' : [
+            'DEFINES+=-DUSE_USB_OTG_FS=1',
+            'STLIB=STM32F405xx',
+            'PRECOMPILED_OBJS+=$(ROOT)/targetlibs/stm32f4/lib/startup_stm32f40_41xxx.o'
+        ]
+    }
 }
 
 chip = {
