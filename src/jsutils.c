@@ -21,7 +21,7 @@
 
 /** Error flags for things that we don't really want to report on the console,
  * but which are good to know about */
-JsErrorFlags jsErrorFlags;
+volatile JsErrorFlags jsErrorFlags;
 
 
 bool isWhitespace(char ch) {
@@ -29,7 +29,6 @@ bool isWhitespace(char ch) {
            (ch==0x0B) || // vertical tab
            (ch==0x0C) || // form feed
            (ch==0x20) || // space
-           (((unsigned char)ch)==0xA0) || // no break space
            (ch=='\n') ||
            (ch=='\r');
 }
@@ -630,14 +629,18 @@ void ftoa_bounded_extra(JsVarFloat val,char *str, size_t len, int radix, int fra
     }
 #ifndef USE_NO_FLOATS
     if (((fractionalDigits<0) && val>0) || fractionalDigits>0) {
-      if (--len <= 0) { *str=0; return; } // bounds check
-      *(str++)='.';
+      bool hasPt = false;
       val*=radix;
       while (((fractionalDigits<0) && (fractionalDigits>-12) && (val > stopAtError)) || (fractionalDigits > 0)) {
         int v = (int)(val+((fractionalDigits==1) ? 0.4 : 0.00000001) );
         val = (val-v)*radix;
+	if (v==radix) v=radix-1;
+        if (!hasPt) {	
+	  hasPt = true;
+          if (--len <= 0) { *str=0; return; } // bounds check
+          *(str++)='.';
+        }
         if (--len <= 0) { *str=0; return; } // bounds check
-        if (v==radix) v=radix-1;
         *(str++)=itoch(v);
         fractionalDigits--;
       }
@@ -692,8 +695,23 @@ void vcbprintf(
       fmt++;
       char fmtChar = *fmt++;
       switch (fmtChar) {
-      case '0': {
-        int digits = (*fmt++) - '0';
+      case '0':
+      case '1':
+      case '2':
+      case '3':
+      case '4':
+      case '5':
+      case '6':
+      case '7':
+      case '8':
+      case '9':
+      {
+        const char *pad = " ";
+        if (fmtChar=='0') {
+          pad = "0";
+          fmtChar = *fmt++;
+        }
+        int digits = fmtChar - '0';
          // of the form '%02d'
         int v = va_arg(argp, int);
         if (*fmt=='x') itostr_extra(v, buf, false, 16);
@@ -701,7 +719,7 @@ void vcbprintf(
         fmt++; // skip over 'd'
         int len = (int)strlen(buf);
         while (len < digits) {
-          user_callback("0",user_data);
+          user_callback(pad,user_data);
           len++;
         }
         user_callback(buf,user_data);
@@ -743,7 +761,7 @@ void vcbprintf(
         if (quoted) user_callback("\"",user_data);
       } break;
       case 'j': {
-        JsVar *v = jsvAsString(va_arg(argp, JsVar*), false/*no unlock*/);
+        JsVar *v = va_arg(argp, JsVar*);
         jsfGetJSONWithCallback(v, JSON_SOME_NEWLINES | JSON_PRETTY | JSON_SHOW_DEVICES, 0, user_callback, user_data);
         break;
       }
@@ -815,9 +833,19 @@ extern int LINKER_END_VAR; // should be 'void', but 'int' avoids warnings
 size_t jsuGetFreeStack() {
 #ifdef ARM
   void *frame = __builtin_frame_address(0);
-  return (size_t)((char*)&LINKER_END_VAR) - (size_t)((char*)frame);
+  size_t stackPos = (size_t)((char*)frame);
+  size_t stackEnd = (size_t)((char*)&LINKER_END_VAR);
+  if (stackPos < stackEnd) return 0; // should never happen, but just in case of overflow!
+  return  stackPos - stackEnd;
+#elif defined(LINUX)
+  // On linux, we set STACK_BASE from `main`.
+  char ptr; // this is on the stack
+  extern void *STACK_BASE;
+  uint32_t count =  (uint32_t)((size_t)STACK_BASE - (size_t)&ptr);
+  return 1000000 - count; // give it 1 megabyte of stack
 #else
-  return 100000000; // lots.
+  // stack depth seems pretty platform-specific :( Default to a value that disables it
+  return 1000000; // no stack depth check on this platform
 #endif
 }
 

@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2015 Gordon Williams <gw@pur3.co.uk>
  *
- * This Source Code Form is subject to the terms of the Mozilla Publici
+ * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  *
@@ -73,6 +73,9 @@ static IOEventFlags pinToEV_EXTI(
 
 static uint8_t g_pinState[JSH_PIN_COUNT];
 
+// Whether a pin is being used for soft PWM or not
+BITFIELD_DECL(jshPinSoftPWM, JSH_PIN_COUNT);
+
 /**
 * interrupt handler for gpio interrupts
 */
@@ -122,11 +125,9 @@ void jshPinDefaultPullup() {
  * Initialize the JavaScript hardware interface.
  */
 void jshInit() {
-  uint32_t freeHeapSize = esp_get_free_heap_size();
-  jsWarn( "Free heap size: %d", freeHeapSize);
   esp32_wifi_init();
-  //jswrap_ESP32_wifi_soft_init();
   jshInitDevices();
+  BITFIELD_CLEAR(jshPinSoftPWM);
   if (JSHPINSTATE_I2C != 13 || JSHPINSTATE_GPIO_IN_PULLDOWN != 6 || JSHPINSTATE_MASK != 15) {
     jsError("JshPinState #defines have changed, please update pinStateToString()");
   }
@@ -144,21 +145,20 @@ void jshInit() {
  * Reset the Espruino environment.
  */
 void jshReset() {
-    jshResetDevices();
-    jshPinDefaultPullup() ;
-    UartReset();
-	RMTReset();
-	ADCReset();
-	SPIReset();
-	I2CReset();
+  jshResetDevices();
+  jshPinDefaultPullup() ;
+  UartReset();
+  RMTReset();
+  ADCReset();
+  SPIReset();
+  I2CReset();
 }
 
 /**
  * Re-init the ESP32 after a soft-reset
  */
 void jshSoftInit() {
-  //jsWarn(">> jshSoftInit()\n");
-  jswrap_ESP32_wifi_soft_init();
+  jswrap_esp32_wifi_soft_init();
 }
 
 /**
@@ -177,18 +177,17 @@ int jshGetSerialNumber(unsigned char *data, int maxChars) {
   return 6;
 }
 
-//===== Interrupts and sleeping
-//Mux to protect the JshInterrupt status
-//static portMUX_TYPE xJshInterrupt = portMUX_INITIALIZER_UNLOCKED;
 void jshInterruptOff() { 
-    //xTaskResumeAll();
-  //taskEXIT_CRITICAL(&xJshInterrupt);
   taskDISABLE_INTERRUPTS();
 }
 
 void jshInterruptOn()  {
-  //taskENTER_CRITICAL(&xJshInterrupt);
   taskENABLE_INTERRUPTS();
+}
+
+/// Are we currently in an interrupt?
+bool jshIsInInterrupt() {
+  return false; // FIXME!
 }
 
 /// Enter simple sleep mode (can be woken up by interrupts). Returns true on success
@@ -202,7 +201,7 @@ bool jshSleep(JsSysTime timeUntilWake) {
  * Delay (blocking) for the supplied number of microseconds.
  */
 void jshDelayMicroseconds(int microsec) {
-  ets_delay_us(microsec);
+  ets_delay_us((uint32_t)microsec);
 } // End of jshDelayMicroseconds
 
 
@@ -234,6 +233,12 @@ void jshPinSetState(
   Pin pin,                 //!< The pin to have its state changed.
     JshPinState state        //!< The new desired state of the pin.
   ) {
+  /* Make sure we kill software PWM if we set the pin state
+   * after we've started it */
+  if (BITFIELD_GET(jshPinSoftPWM, pin)) {
+    BITFIELD_SET(jshPinSoftPWM, pin, 0);
+    jstPinPWM(0,0,pin);
+  }
   gpio_mode_t mode;
   gpio_pull_mode_t pull_mode=GPIO_FLOATING;
   switch(state) {
@@ -326,15 +331,25 @@ JshPinFunction jshPinAnalogOutput(Pin pin,
     JsVarFloat freq,
     JshAnalogOutputFlags flags) { // if freq<=0, the default is used
   UNUSED(flags);
+  if (value<0) value=0;
+  if (value>1) value=1;
+  if (!isfinite(freq)) freq=0;
   if(pin == 25 || pin == 26){
-    value = (value * 256);
-    uint8_t val8 = value;
-    writeDAC(pin,val8);
+	if(flags & (JSAOF_ALLOW_SOFTWARE | JSAOF_FORCE_SOFTWARE)) jsError("pin does not support software PWM");
+    writeDAC(pin,(uint8_t)(value * 256));
   }
   else{
-    value = (value * PWMTimerRange);
-    uint16_t val16 = value;
-    writePWM(pin,val16,(int) freq);
+	if(flags & JSAOF_ALLOW_SOFTWARE){
+	  if (!jshGetPinStateIsManual(pin)){ 
+        BITFIELD_SET(jshPinSoftPWM, pin, 0);
+        jshPinSetState(pin, JSHPINSTATE_GPIO_OUT);
+      }
+      BITFIELD_SET(jshPinSoftPWM, pin, 1);
+      if ((freq<=0)) freq=50;
+      jstPinPWM(freq, value, pin);
+      return 0;
+    }
+    else writePWM(pin,( uint16_t)(value * PWMTimerRange),(int) freq);
   }
   return 0;
 }
@@ -354,8 +369,9 @@ void jshSetOutputValue(JshPinFunction func, int value) {
   }
   else{
     pin = ((func >> JSH_SHIFT_INFO) << 4) + ((func >> JSH_SHIFT_TYPE) & 15);
-    value >> (16 - PWMTimerBit);
-    setPWM(pin,value);
+    // convert the 16 bit value to a 10 bit value.
+    value=value >> (16 - PWMTimerBit);
+    setPWM( (Pin)pin, (uint16_t)value);
   }
 }
 
@@ -394,20 +410,41 @@ void jshPinPulse(
     bool pulsePolarity,   //!< The value to be pulsed into the pin.
     JsVarFloat pulseTime  //!< The duration in milliseconds to hold the pin.
 ) {
-  int duration = (int)pulseTime * 1000; //from millisecs to microsecs
-  sendPulse(pin, pulsePolarity, duration);
+  // ESP32 specific version, replaced by Espruino Style version from nrf52
+  //int duration = (int)pulseTime * 1000; //from millisecs to microsecs
+  //sendPulse(pin, pulsePolarity, duration);
+
+  // ---- USE TIMER FOR PULSE
+  if (!jshIsPinValid(pin)) {
+       jsExceptionHere(JSET_ERROR, "Invalid pin!");
+       return;
+  }
+  if (pulseTime<=0) {
+    // just wait for everything to complete
+    jstUtilTimerWaitEmpty();
+    return;
+  } else {
+    // find out if we already had a timer scheduled
+    UtilTimerTask task;
+    if (!jstGetLastPinTimerTask(pin, &task)) {
+      // no timer - just start the pulse now!
+      jshPinOutput(pin, pulsePolarity);
+      task.time = jshGetSystemTime();
+    }
+    // Now set the end of the pulse to happen on a timer
+    jstPinOutputAtTime(task.time + jshGetTimeFromMilliseconds(pulseTime), &pin, 1, !pulsePolarity);
+  }
 }
 
 
 /**
  * Determine whether the pin can be watchable.
- * \return Returns true if the pin is wathchable.
+ * \return Returns true if the pin is watchable.
  */
 bool jshCanWatch(
     Pin pin //!< The pin that we are asking whether or not we can watch it.
   ) {
-  UNUSED(pin);
-  return true; //lets assume all pins will do
+  return pin == 0 || ( pin >= 12 && pin <= 19 ) || pin == 21 ||  pin == 22 || ( pin >= 25 && pin <= 27 ) || ( pin >= 34 && pin <= 39 );
 }
 
 
@@ -468,6 +505,12 @@ bool jshIsEventForPin(
 
 
 void jshUSARTSetup(IOEventFlags device, JshUSARTInfo *inf) {
+  
+  if (inf->errorHandling) {
+    jsExceptionHere(JSET_ERROR, "ESP32 Espruino builds can't handle framing/parity errors (errors:true)");
+    return;
+  }  
+  
   initSerial(device,inf);
 }
 
@@ -510,9 +553,12 @@ JsVarFloat jshGetMillisecondsFromTime(JsSysTime time) {
 /**
  * Return the current time in microseconds.
  */
+static portMUX_TYPE JSmicrosMux = portMUX_INITIALIZER_UNLOCKED;
 JsSysTime CALLED_FROM_INTERRUPT jshGetSystemTime() { // in us -- can be called at interrupt time
   struct timeval tm;
+  portENTER_CRITICAL_ISR(&JSmicrosMux);
   gettimeofday(&tm, 0);
+  portEXIT_CRITICAL_ISR(&JSmicrosMux);
   return (JsSysTime)(tm.tv_sec)*1000000L + tm.tv_usec;
 }
 
@@ -535,10 +581,12 @@ void jshUtilTimerDisable() {
 }
 
 void jshUtilTimerStart(JsSysTime period) {
+  if(period <= 30){period = 30;}
   startTimer(0,(uint64_t) period);
 }
 
 void jshUtilTimerReschedule(JsSysTime period) {
+  if(period <= 30){period = 30;}
   rescheduleTimer(0,(uint64_t) period);
 }
 
@@ -667,6 +715,19 @@ void jshFlashErasePage(
     uint32_t addr //!<
   ) {
   spi_flash_erase_sector(addr >> FLASH_PAGE_SHIFT);
+}
+
+size_t jshFlashGetMemMapAddress(size_t ptr) {
+   // if ptr is high already, assume we know what we're accessing
+  if (ptr > 0x10000000) return ptr;
+  // romdata_jscode is memory mapped address from the js_code partition in rom - targets/esp32/main.c
+  extern char* romdata_jscode;
+  if (romdata_jscode==0) {
+    jsError("Couldn't find js_code partition - update with partition_espruino.bin\n");
+    return 0;
+  }
+  // Flash memory access is offset to 0, so remove starting location as already accounted for
+  return &romdata_jscode[ptr - 0x100000 ];
 }
 
 unsigned int jshSetSystemClock(JsVar *options) {

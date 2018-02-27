@@ -43,6 +43,7 @@
 #include "stm32l4xx_ll_adc.h"
 #include "stm32l4xx_ll_cortex.h"
 #include "stm32l4xx_ll_dac.h"
+#include "stm32l4xx_ll_pwr.h"
 
 #include "stm32l4xx_hal.h" // Used for flash management
 
@@ -56,6 +57,20 @@
 #define IRQ_PRIOR_USART 6 // a little higher so we don't get lockups of something tries to print
 #define IRQ_PRIOR_MED 7
 #define IRQ_PRIOR_LOW 15
+
+/* On STM32 there's no 7 bit UART mode, so
+ * we much just fake it by using an 8 bit UART
+ * and then masking off the top bit */
+unsigned char jsh7BitUART;
+bool jshIsSerial7Bit(IOEventFlags device) {
+  assert(USART_COUNT<=8);
+  return jsh7BitUART & (1<<(device-EV_SERIAL1));
+}
+void jshSetIsSerial7Bit(IOEventFlags device, bool is7Bit) {
+  assert(USART_COUNT<=8);
+  if (is7Bit) jsh7BitUART |= (1<<(device-EV_SERIAL1));
+  else  jsh7BitUART &= ~(1<<(device-EV_SERIAL1));
+}
 
 
 // ----------------------------------------------------------------------------
@@ -149,7 +164,7 @@ static ALWAYS_INLINE uint32_t stmExtI(Pin ipin) {
 
 static ALWAYS_INLINE GPIO_TypeDef *stmPort(Pin pin) {
 
-  JsvPinInfoPort port = pinInfo[pin].port;
+  JsvPinInfoPort port = pinInfo[pin].port&JSH_PORT_MASK;
 #if 1
   return (GPIO_TypeDef *)((char*)GPIOA + (port-JSH_PORTA)*0x0400);
 #else
@@ -194,7 +209,7 @@ static ALWAYS_INLINE uint32_t stmPinSource(JsvPinInfoPin ipin) {
 }
 
 static ALWAYS_INLINE uint8_t stmPortSource(Pin pin) {
-  JsvPinInfoPort port = pinInfo[pin].port;
+  JsvPinInfoPort port = pinInfo[pin].port&JSH_PORT_MASK;
 #if 1
   return (uint8_t)(port-JSH_PORTA);
 #else
@@ -277,7 +292,7 @@ static ALWAYS_INLINE uint8_t functionToAF(JshPinFunction func) {
 }
 
 void jshSetAFPin(GPIO_TypeDef* port, uint16_t pin, uint8_t af) {
-  if(pin > LL_GPIO_PIN_0 && pin <=LL_GPIO_PIN_7){
+  if(pin >= LL_GPIO_PIN_0 && pin <=LL_GPIO_PIN_7){
     LL_GPIO_SetAFPin_0_7(port, pin, af);
   } else {
     LL_GPIO_SetAFPin_8_15(port, pin, af);
@@ -308,16 +323,16 @@ USART_TypeDef* getUsartFromDevice(IOEventFlags device) {
  switch (device) {
    case EV_SERIAL1 : return USART1;
    case EV_SERIAL2 : return USART2;
-#ifdef USART3
+#if USART_COUNT>=3
    case EV_SERIAL3 : return USART3;
 #endif
-#ifdef UART4
+#if USART_COUNT>=4
    case EV_SERIAL4 : return UART4;
 #endif
-#ifdef UART5
+#if USART_COUNT>=5
    case EV_SERIAL5 : return UART5;
 #endif
-#ifdef USART6
+#if USART_COUNT>=6
    case EV_SERIAL6 : return USART6;
 #endif
    default: return 0;
@@ -380,20 +395,24 @@ void *setDeviceClockCmd(JshPinFunction device, FunctionalState cmd) {
 #endif
 #if I2C_COUNT >= 2
   } else if (device==JSH_I2C2) {
-      if(cmd == ENABLE) LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_I2C2);
-      else LL_APB1_GRP1_DisableClock(LL_APB1_GRP1_PERIPH_I2C2);
+      if(cmd == ENABLE) {
+        LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_I2C2);
+        LL_RCC_SetI2CClockSource(LL_RCC_I2C2_CLKSOURCE_SYSCLK);
+      } else LL_APB1_GRP1_DisableClock(LL_APB1_GRP1_PERIPH_I2C2);
       /* Seems some F103 parts require this reset step - some hardware problem */
-      LL_APB1_GRP1_ForceReset(LL_APB1_GRP1_PERIPH_I2C2);
-      LL_APB1_GRP1_ReleaseReset(LL_APB1_GRP1_PERIPH_I2C2);
+      //LL_APB1_GRP1_ForceReset(LL_APB1_GRP1_PERIPH_I2C2);
+      //LL_APB1_GRP1_ReleaseReset(LL_APB1_GRP1_PERIPH_I2C2);
       ptr = I2C2;
 #endif
 #if I2C_COUNT >= 3
   } else if (device==JSH_I2C3) {
-      if(cmd == ENABLE) LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_I2C3);
-      else LL_APB1_GRP1_DisableClock(LL_APB1_GRP1_PERIPH_I2C3);
+      if(cmd == ENABLE) {
+        LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_I2C3);
+        LL_RCC_SetI2CClockSource(LL_RCC_I2C3_CLKSOURCE_SYSCLK);
+      } else LL_APB1_GRP1_DisableClock(LL_APB1_GRP1_PERIPH_I2C3);
       /* Seems some F103 parts require this reset step - some hardware problem */
-      LL_APB1_GRP1_ForceReset(LL_APB1_GRP1_PERIPH_I2C3);
-      LL_APB1_GRP1_ReleaseReset(LL_APB1_GRP1_PERIPH_I2C3);
+      //LL_APB1_GRP1_ForceReset(LL_APB1_GRP1_PERIPH_I2C3);
+      //LL_APB1_GRP1_ReleaseReset(LL_APB1_GRP1_PERIPH_I2C3);
       ptr = I2C3;
 #endif
   } else if (device==JSH_TIMER1) {
@@ -642,23 +661,6 @@ void *NO_INLINE checkPinsForDevice(JshPinFunction device, int count, Pin *pins, 
   return ptr;
 }
 
-
-/**
-  * @brief  Function called in case of error detected in USART IT Handler
-  * @param  None
-  * @retval None
-  */
-void Error_Callback(void)
-{
-  /* Set LED to Blinking mode to indicate error occurs */
-  while(1)
-  {
-    LL_GPIO_TogglePin(GPIOA, LL_GPIO_PIN_5);
-    LL_mDelay(150);
-  }
-}
-
-
 /** Set up a UART, if pins are -1 they will be guessed */
 void jshUSARTSetup(IOEventFlags device, JshUSARTInfo *inf){
 
@@ -666,7 +668,8 @@ void jshUSARTSetup(IOEventFlags device, JshUSARTInfo *inf){
 
   jshSetDeviceInitialised(device, true);
 
-  jshSetFlowControlEnabled(device, inf->xOnXOff);
+  jshSetFlowControlEnabled(device, inf->xOnXOff, inf->pinCTS);
+  jshSetErrorHandlingEnabled(device, inf->errorHandling);
 
   JshPinFunction funcType = jshGetPinFunctionFromDevice(device);
   if (funcType==0) return; // not a proper serial port, ignore it
@@ -702,6 +705,7 @@ void jshUSARTSetup(IOEventFlags device, JshUSARTInfo *inf){
   // LL_USART_ReceiveData9(USART1) & 0x7F; for the 7-bit case and
   // LL_USART_ReceiveData9(USART1) & 0xFF; for the 8-bit case
   // the register is 9-bits long.
+  jshSetIsSerial7Bit(device, inf->bytesize == 7);
 
   if((inf->bytesize == 7 && inf->parity > 0) || (inf->bytesize == 8 && inf->parity == 0)) {
     USART_InitStructure.DataWidth = LL_USART_DATAWIDTH_8B;
@@ -794,31 +798,53 @@ volatile unsigned char jshSPIBuf[SPI_COUNT][JSH_SPIBUF_MASK+1]; // Need to be mo
   */
 void SystemClock_Config(void)
 {
-  /* MSI configuration and activation */
+  /* code directly coming from cube MX, L496 disco board */
+
   LL_FLASH_SetLatency(LL_FLASH_LATENCY_4);
+  if(LL_FLASH_GetLatency() != LL_FLASH_LATENCY_4)
+  {
+    while(1);
+  }
+  LL_PWR_SetRegulVoltageScaling(LL_PWR_REGU_VOLTAGE_SCALE1);
+
+#ifdef USB
+  /* Select HSI48 as USB clock source */
+  LL_RCC_HSI48_Enable();
+  /* Wait till HSI48 is ready */
+  while(LL_RCC_HSI48_IsReady() != 1)
+  {
+  }
+#endif
+
+  /* MSI configuration and activation */
   LL_RCC_MSI_Enable();
+  /* Wait till MSI is ready */
   while(LL_RCC_MSI_IsReady() != 1)
   {
   };
 
+  LL_RCC_MSI_EnableRangeSelection();
+  LL_RCC_MSI_SetRange(LL_RCC_MSIRANGE_6);
+  LL_RCC_MSI_SetCalibTrimming(0);
+
   /* Main PLL configuration and activation */
   LL_RCC_PLL_ConfigDomain_SYS(LL_RCC_PLLSOURCE_MSI, LL_RCC_PLLM_DIV_1, 40, LL_RCC_PLLR_DIV_2);
-  LL_RCC_PLL_Enable();
   LL_RCC_PLL_EnableDomain_SYS();
+  LL_RCC_PLL_Enable();
+  /* Wait till PLL is ready */
   while(LL_RCC_PLL_IsReady() != 1)
   {
   };
 
   /* Sysclk activation on the main PLL */
   LL_RCC_SetAHBPrescaler(LL_RCC_SYSCLK_DIV_1);
+  LL_RCC_SetAPB1Prescaler(LL_RCC_APB1_DIV_1);
+  LL_RCC_SetAPB2Prescaler(LL_RCC_APB2_DIV_1);
   LL_RCC_SetSysClkSource(LL_RCC_SYS_CLKSOURCE_PLL);
+  /* Wait till System clock is ready */
   while(LL_RCC_GetSysClkSource() != LL_RCC_SYS_CLKSOURCE_STATUS_PLL)
   {
   };
-
-  /* Set APB1 & APB2 prescaler*/
-  LL_RCC_SetAPB1Prescaler(LL_RCC_APB1_DIV_1);
-  LL_RCC_SetAPB2Prescaler(LL_RCC_APB2_DIV_1);
 
   /* Set systick to 1ms in using frequency set to 80MHz */
   /* This frequency can be calculated through LL RCC macro */
@@ -828,6 +854,12 @@ void SystemClock_Config(void)
 
   /* Update CMSIS variable (which can be updated also through SystemCoreClockUpdate function) */
   LL_SetSystemCoreClock(80000000);
+#ifdef USB
+  LL_RCC_SetUSBClockSource(LL_RCC_USB_CLKSOURCE_HSI48);
+#endif
+
+  /* SysTick_IRQn interrupt configuration */
+  NVIC_SetPriority(SysTick_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(),0, 0));
 }
 
 static void jshResetPeripherals() {
@@ -887,6 +919,19 @@ void jshInit(){
   // enable clocks
   LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_SYSCFG);
   LL_AHB2_GRP1_EnableClock(LL_AHB2_GRP1_PERIPH_ALL);
+
+#ifdef USB
+  __HAL_RCC_PWR_CLK_ENABLE();
+
+  /* enable USB power on Pwrctrl CR2 register */
+  HAL_PWREx_EnableVddUSB();
+#endif
+
+
+#if defined(GPIOG)
+  /* enable the Vddio2 power supply to use PG[15:2] */
+  HAL_PWREx_EnableVddIO2();
+#endif
 
 #ifdef LED1_PININDEX
   // turn led on (status)
@@ -997,7 +1042,21 @@ void jshReset(){
 /** Code that is executed each time around the idle loop. Prod watchdog timers here,
  * and on platforms without GPIO interrupts you can check watched Pins for changes. */
 void jshIdle(){
-
+#ifdef USB
+  static bool wasUSBConnected = false;
+  bool USBConnected = jshIsUSBSERIALConnected();
+  if (wasUSBConnected != USBConnected) {
+    wasUSBConnected = USBConnected;
+    if (USBConnected && jsiGetConsoleDevice()!=EV_LIMBO) {
+      if (!jsiIsConsoleDeviceForced())
+        jsiSetConsoleDevice(EV_USBSERIAL, false);
+    } else {
+      if (!jsiIsConsoleDeviceForced() && jsiGetConsoleDevice()==EV_USBSERIAL)
+        jsiSetConsoleDevice(jsiGetPreferredConsoleDevice(), false);
+      jshTransmitClearDevice(EV_USBSERIAL); // clear the transmit queue
+    }
+  }
+#endif
         return;
 }
 
@@ -1005,7 +1064,7 @@ void jshIdle(){
  * If time is 0xFFFFFFFFFFFFFFFF then go to sleep without setting a timer to wake
  * up.
  *
- * This function can also check `jsiStatus & JSIS_ALLOW_DEEP_SLEEP`, and if there
+ * This function can also check `jsfGetFlag(JSF_DEEP_SLEEP)`, and if there
  * is no pending serial data and nothing working on Timers, it will put the device
  * into deep sleep mode where the high speed oscillator turns off.
  *
@@ -1067,7 +1126,11 @@ int jshGetSerialNumber(unsigned char *data, int maxChars){
 /** Is the USB port connected such that we could move the console over to it
  * (and that we should store characters sent to USB). On non-USB boards this just returns false. */
 bool jshIsUSBSERIALConnected(){
-    return FALSE;
+#ifdef USB
+  return USB_IsConnected();
+#else
+  return false;
+#endif
 }
 
 
@@ -1133,6 +1196,10 @@ void jshInterruptOn(){
 }
 ///< re-enable interrupts
 
+/// Are we currently in an interrupt?
+bool jshIsInInterrupt() {
+  return (SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk) != 0;
+}
 
 void jshDelayMicroseconds(int microsec){
   int iter = (int)(((long long)microsec * (long long)JSH_DELAY_MULTIPLIER) >> 10);
@@ -1160,11 +1227,11 @@ bool jshPinGetValue(Pin pin){
 
 /* defines related to ADC operations
  * (See L4 reference manual and examples for more details) */
-#define ADC_CALIBRATION_TIMEOUT_MS        ((uint32_t)   1)
+//#define ADC_CALIBRATION_TIMEOUT_MS        ((uint32_t)   1)
 #define ADC_ENABLE_TIMEOUT_MS             ((uint32_t)   1)
-#define ADC_DISABLE_TIMEOUT_MS            ((uint32_t)   1)
-#define ADC_STOP_CONVERSION_TIMEOUT_MS    ((uint32_t)   1)
-#define ADC_CONVERSION_TIMEOUT_MS         ((uint32_t) 500)
+//#define ADC_DISABLE_TIMEOUT_MS            ((uint32_t)   1)
+//#define ADC_STOP_CONVERSION_TIMEOUT_MS    ((uint32_t)   1)
+//#define ADC_CONVERSION_TIMEOUT_MS         ((uint32_t) 500)
 
 #define ADC_DELAY_CALIB_ENABLE_CPU_CYCLES (LL_ADC_DELAY_CALIB_ENABLE_ADC_CYCLES * 32) // Delay between ADC end of calibration and ADC enable.
 
@@ -1179,8 +1246,11 @@ static NO_INLINE int jshAnalogRead(Pin pin, JsvPinInfoAnalog analog, bool fastCo
   IRQn_Type adcIRQ;
   ADC_TypeDef *ADCx = stmADC(analog);
 
+#if defined(GPIO_ASCR_ASC0)
+  /* For families where Analog Control ASC0 register is present */
   /* Connect GPIO analog switch to ADC input */
   LL_GPIO_EnablePinAnalogControl(stmPort(pin), stmPin(pin));
+#endif /* GPIO_ASCR_ASC0 */
 
   if(ADCx == ADC1 || ADCx == ADC2) {
     adcIRQ = ADC1_2_IRQn;
@@ -1198,53 +1268,16 @@ static NO_INLINE int jshAnalogRead(Pin pin, JsvPinInfoAnalog analog, bool fastCo
   /* Set ADC clock (conversion clock) common to several ADC instances */
   LL_ADC_SetCommonClock(__LL_ADC_COMMON_INSTANCE(ADCx), LL_ADC_CLOCK_SYNC_PCLK_DIV2);
 
-  /* ADC settings */
-  LL_ADC_REG_SetTriggerSource(ADCx, LL_ADC_REG_TRIG_SOFTWARE);
-  LL_ADC_REG_SetContinuousMode(ADCx, LL_ADC_REG_CONV_SINGLE);
-  LL_ADC_REG_SetOverrun(ADCx, LL_ADC_REG_OVR_DATA_OVERWRITTEN);
-  LL_ADC_REG_SetSequencerLength(ADCx, LL_ADC_REG_SEQ_SCAN_DISABLE);
-  LL_ADC_REG_SetSequencerRanks(ADCx, LL_ADC_REG_RANK_1, stmADCChannel(analog));
-  LL_ADC_SetChannelSamplingTime(ADCx, stmADCChannel(analog), LL_ADC_SAMPLINGTIME_47CYCLES_5);
-
-  /* Enable interruption ADC group regular overrun */
-  LL_ADC_EnableIT_OVR(ADCx);
-
   /* Disable ADC deep power down (enabled by default after reset state) */
   LL_ADC_DisableDeepPowerDown(ADCx);
 
   /* Enable ADC internal voltage regulator */
   LL_ADC_EnableInternalRegulator(ADCx);
 
-  /* Delay for ADC internal voltage regulator stabilization.                */
-  /* Compute number of CPU cycles to wait for, from delay in us.            */
-  /* Note: Variable divided by 2 to compensate partially                    */
-  /*       CPU processing cycles (depends on compilation optimization).     */
-  wait_loop_index = ((LL_ADC_DELAY_INTERNAL_REGUL_STAB_US * (SystemCoreClock / (100000 * 2))) / 10);
-  while(wait_loop_index != 0){
-    wait_loop_index--;
-  }
+  jshDelayMicroseconds(1024*10);
 
-  /* Run ADC self calibration */
-  LL_ADC_StartCalibration(ADCx, LL_ADC_SINGLE_ENDED);
-
-  /* Poll for ADC effectively calibrated */
-  Timeout = ADC_CALIBRATION_TIMEOUT_MS;
-
-  while (LL_ADC_IsCalibrationOnGoing(ADCx) != 0){
-    if (LL_SYSTICK_IsActiveCounterFlag()){
-      if(Timeout-- == 0){
-        jsiConsolePrintf("\n  jshAnalogRead Timeout !!!");
-      }
-    }
-  }
-
-  /* Delay between ADC end of calibration and ADC enable.                   */
-  /* Note: Variable divided by 2 to compensate partially                    */
-  /*       CPU processing cycles (depends on compilation optimization).     */
-  wait_loop_index = (ADC_DELAY_CALIB_ENABLE_CPU_CYCLES >> 1);
-  while(wait_loop_index != 0){
-    wait_loop_index--;
-  }
+  /* ADC settings */
+  LL_ADC_REG_SetSequencerRanks(ADCx, LL_ADC_REG_RANK_1, stmADCChannel(analog));
 
   /* Enable ADC */
   LL_ADC_Enable(ADCx);
@@ -1263,7 +1296,7 @@ static NO_INLINE int jshAnalogRead(Pin pin, JsvPinInfoAnalog analog, bool fastCo
   /* Perform ADC group regular conversion start, poll for conversion        */
   LL_ADC_REG_StartConversion(ADCx);
 
-  Timeout = ADC_UNITARY_CONVERSION_TIMEOUT_MS;
+  Timeout = ADC_UNITARY_CONVERSION_TIMEOUT_MS*5;
   while (LL_ADC_IsActiveFlag_EOC(ADCx) == 0){
     if (LL_SYSTICK_IsActiveCounterFlag()){
       if(Timeout-- == 0){
@@ -1272,9 +1305,14 @@ static NO_INLINE int jshAnalogRead(Pin pin, JsvPinInfoAnalog analog, bool fastCo
     }
   }
 
+  LL_ADC_ClearFlag_EOC(ADCx);
+
   /* Retrieve ADC conversion data */
   /* (data scale corresponds to ADC resolution: 12 bits) */
   value = LL_ADC_REG_ReadConversionData12(ADCx);
+
+  LL_AHB2_GRP1_ForceReset(LL_AHB2_GRP1_PERIPH_ADC);
+  LL_AHB2_GRP1_ReleaseReset(LL_AHB2_GRP1_PERIPH_ADC);
 
   return value;
 }
@@ -1906,8 +1944,9 @@ void jshFlashErasePage(uint32_t addr){
   EraseInitStruct.Page        = page;
   EraseInitStruct.NbPages     = 1;
 
-  if( HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError) != HAL_OK){
-    Error_Callback();
+  HAL_StatusTypeDef res = HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError);
+  if( res != HAL_OK){
+    jsExceptionHere(JSET_INTERNALERROR, "Flash Erase Error %d", res);
   }
 
   HAL_FLASH_Lock();
@@ -1916,28 +1955,61 @@ void jshFlashErasePage(uint32_t addr){
 
 /** Read data from flash memory into the buffer, the flash address has no alignment restrictions
   * and the len may be (and often is) 1 byte */
-void jshFlashRead(void *buf, uint32_t addr, uint32_t len){
+void jshFlashRead(void *buf, uint32_t addr, uint32_t len) {
   memcpy(buf, (void*)addr, len);
 }
+
+static void jshFlashWrite64(uint64_t data, uint32_t addr) {
+  assert(!(addr&7));
+  //jsiConsolePrintf("Write 0x%08x%08x to 0x%08x\n", (uint32_t)(data>>32),(uint32_t)data, addr);
+  HAL_StatusTypeDef res = HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, addr, data);
+  if(res != HAL_OK){
+    // see HAL_FLASH_GetError for info on error codes
+    jsExceptionHere(JSET_INTERNALERROR, "Flash Write Error %d,0x%x (0x%08x)", res, HAL_FLASH_GetError(), addr);
+  }
+}
+
 /** Write data to flash memory from the buffer, the buffer address and flash address are
   * guaranteed to be 4-byte aligned, and length is a multiple of 4.  */
-void jshFlashWrite(void *buf, uint32_t addr, uint32_t len){
+void jshFlashWrite(void *buf, uint32_t addr, uint32_t len) {
+  char *cbuf = (char*)buf;
+  assert(!(addr&3));
+  assert(!(len&3));
 
   HAL_FLASH_Unlock();
+  // bodge up single 32 bit writes
+  if (addr&4) {
+    addr -= 4;
+    char buf64[8];
+    jshFlashRead(&buf64[0],addr,4);
+    memcpy(&buf64[4], cbuf, 4);
+    jshFlashWrite64(*((uint64_t*)buf64), addr);
+    cbuf += 4;
+    addr += 8;
+    len -= 4;
+  }
 
-  unsigned int i;
+  // 64 bit writes
+  while (len>7 && !jspIsInterrupted()) {
+    jshFlashWrite64(*((uint64_t*)cbuf), addr);
+    cbuf += 8;
+    addr += 8;
+    len -= 8;
+  }
 
-  for (i=0;i<len/8;i++){
-    if(HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, addr, ((uint64_t*)buf)[i]) != HAL_OK){
-      HAL_FLASH_Lock();
-      Error_Callback();
-    }
-    addr = addr + 8;
+  // final 32 bit write?
+  if (len>3 && !jspIsInterrupted()) {
+    char buf64[8];
+    memcpy(&buf64[0], cbuf, 4);
+    jshFlashRead(&buf64[4],addr+4,4);
+    jshFlashWrite64(*((uint64_t*)buf64), addr);
   }
 
   HAL_FLASH_Lock();
-
 }
+
+// Just pass data through, since we can access flash at the same address we wrote it
+size_t jshFlashGetMemMapAddress(size_t ptr) { return ptr; }
 
 
 /** Utility timer handling functions
@@ -2077,13 +2149,13 @@ void jshDoSysTick(){
 
 // Get the address to read/write to in order to change the state of this pin. Or 0.
 volatile uint32_t *jshGetPinAddress(Pin pin, JshGetPinAddressFlags flags){
-        return;
+        return 0;
 }
 #endif
 
 /// the temperature from the internal temperature sensor, in degrees C
 JsVarFloat jshReadTemperature(){
-        return;
+        return NAN;
 }
 
 /// The voltage that a reading of 1 from `analogRead` actually represents, in volts
@@ -2103,5 +2175,5 @@ unsigned int jshGetRandomNumber(){
  * to match what gets implemented here. The return value is the clock
  * speed in Hz though. */
 unsigned int jshSetSystemClock(JsVar *options){
-        return;
+        return 0;
 }

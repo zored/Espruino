@@ -20,7 +20,7 @@ info = {
  'default_console' : "EV_SERIAL1",
  'default_console_baudrate' : "115200",
  'variables'       : 1600,
- 'binary_name'     : 'espruino_%v_esp8266',
+ 'binary_name'     : 'espruino_%v_esp8266_4mb',
  'build' : {
    'libraries' : [
      'NET',
@@ -51,11 +51,11 @@ chip = {
   'adc'     : 1,
   'dac'     : 0,
   'saved_code' : {
-    # 0x300000 + 4096 * (256 - 16save - 1wifi -4reserved) 
-    'address' :  0x3EB000, # first page is used for wifi save 
+    # 0x000000 + 4096 * ( 256 -  48 save - 1 wifi  - 4 reserved ) 
+    'address' :  0x0CB000, 
     'page_size' : 4096,
-    'pages' : 16,
-    'flash_available' : 940, # firmware can be up to this size
+    'pages' : 48,
+    'flash_available' : 812, # firmware can be up to this size
   },
 };
 
@@ -65,7 +65,7 @@ devices = {
 # left-right, or top-bottom order
 board_esp12 = {
     'top' : ['D1', 'D3', 'D5', 'D4', 'D0', 'D2', 'D15', 'GND'],
-    'bottom' : ['VCC', 'D13', 'D12', 'D14', 'B16', 'CH_EN', 'A0', 'RESET'],
+    'bottom' : ['VCC', 'D13', 'D12', 'D14', 'D16', 'CH_EN', 'A0', 'RESET'],
     'right' : ['D11', 'D8', 'D9', 'D10', 'D7', 'D6'],
 };
 board_esp12["bottom"].reverse()
@@ -111,10 +111,10 @@ board_esp01 = {
 boards = [ board_esp12 ];
 
 def get_pins():
-  pins = pinutils.generate_pins(0,15)
+  pins = pinutils.generate_pins(0,16)
   pinutils.findpin(pins, "PD0", True)["functions"]["LED_1"]=0;
   pinutils.findpin(pins, "PD1", True)["functions"]["USART0_TX"]=0;
   pinutils.findpin(pins, "PD2", True)["functions"]["USART1_TX"]=0;
   pinutils.findpin(pins, "PD3", True)["functions"]["USART0_RX"]=0;
-  # just fake pins D0 .. D15
+  # just fake pins D0 .. D16
   return pins

@@ -26,7 +26,23 @@
   "generate" : "jswrap_arguments",
   "return" : ["JsVar","An array containing all the arguments given to the function"]
 }
-A variable containing the arguments given to the function
+A variable containing the arguments given to the function:
+
+```
+function hello() {
+  console.log(arguments.length, JSON.stringify(arguments));
+}
+hello()        // 0 []
+hello("Test")  // 1 ["Test"]
+hello(1,2,3)   // 3 [1,2,3]
+```
+
+**Note:** Due to the way Espruino works this is doesn't behave exactly
+the same as in normal JavaScript. The length of the arguments array
+will never be less than the number of arguments specified in the 
+function declaration: `(function(a){ return arguments.length; })() == 1`.
+Normal JavaScript interpreters would return `0` in the above case.
+
  */
 extern JsExecInfo execInfo;
 JsVar *jswrap_arguments() {
@@ -236,11 +252,13 @@ JsVar *jswrap_btoa(JsVar *binaryData) {
     jsExceptionHere(JSET_ERROR, "Expecting a string or array, got %t", binaryData);
     return 0;
   }
-  JsVar* base64Data = jsvNewFromEmptyString();
+  size_t inputLength = jsvGetStringLength(binaryData);
+  size_t outputLength = ((inputLength+2)/3)*4;
+  JsVar* base64Data = jsvNewStringOfLength((unsigned int)outputLength, NULL);
   if (!base64Data) return 0;
   JsvIterator itsrc;
   JsvStringIterator itdst;
-  jsvIteratorNew(&itsrc, binaryData);
+  jsvIteratorNew(&itsrc, binaryData, JSIF_EVERY_ARRAY_ELEMENT);
   jsvStringIteratorNew(&itdst, base64Data, 0);
 
 
@@ -263,10 +281,10 @@ JsVar *jswrap_btoa(JsVar *binaryData) {
 
     int triple = (octet_a << 0x10) + (octet_b << 0x08) + octet_c;
 
-    jsvStringIteratorAppend(&itdst, (char)jswrap_btoa_encode(triple >> 18));
-    jsvStringIteratorAppend(&itdst, (char)jswrap_btoa_encode(triple >> 12));
-    jsvStringIteratorAppend(&itdst, (char)((padding>1)?'=':jswrap_btoa_encode(triple >> 6)));
-    jsvStringIteratorAppend(&itdst, (char)((padding>0)?'=':jswrap_btoa_encode(triple)));
+    jsvStringIteratorSetCharAndNext(&itdst, (char)jswrap_btoa_encode(triple >> 18));
+    jsvStringIteratorSetCharAndNext(&itdst, (char)jswrap_btoa_encode(triple >> 12));
+    jsvStringIteratorSetCharAndNext(&itdst, (char)((padding>1)?'=':jswrap_btoa_encode(triple >> 6)));
+    jsvStringIteratorSetCharAndNext(&itdst, (char)((padding>0)?'=':jswrap_btoa_encode(triple)));
   }
 
   jsvIteratorFree(&itsrc);
@@ -281,7 +299,7 @@ JsVar *jswrap_btoa(JsVar *binaryData) {
   "ifndef" : "SAVE_ON_FLASH",
   "generate" : "jswrap_atob",
   "params" : [
-    ["binaryData","JsVar","A string of base64 data to decode"]
+    ["base64Data","JsVar","A string of base64 data to decode"]
   ],
   "return" : ["JsVar","A string containing the decoded data"]
 }
@@ -292,7 +310,9 @@ JsVar *jswrap_atob(JsVar *base64Data) {
     jsExceptionHere(JSET_ERROR, "Expecting a string, got %t", base64Data);
     return 0;
   }
-  JsVar* binaryData = jsvNewFromEmptyString();
+  size_t inputLength = jsvGetStringLength(base64Data);
+  size_t outputLength = inputLength*3/4;
+  JsVar* binaryData = jsvNewStringOfLength((unsigned int)outputLength, NULL);
   if (!binaryData) return 0;
   JsvStringIterator itsrc;
   JsvStringIterator itdst;
@@ -317,9 +337,9 @@ JsVar *jswrap_atob(JsVar *base64Data) {
       }
     }
 
-    if (valid>0) jsvStringIteratorAppend(&itdst, (char)(triple >> 16));
-    if (valid>1) jsvStringIteratorAppend(&itdst, (char)(triple >> 8));
-    if (valid>2) jsvStringIteratorAppend(&itdst, (char)(triple));
+    if (valid>0) jsvStringIteratorSetCharAndNext(&itdst, (char)(triple >> 16));
+    if (valid>1) jsvStringIteratorSetCharAndNext(&itdst, (char)(triple >> 8));
+    if (valid>2) jsvStringIteratorSetCharAndNext(&itdst, (char)(triple));
   }
 
   jsvStringIteratorFree(&itsrc);

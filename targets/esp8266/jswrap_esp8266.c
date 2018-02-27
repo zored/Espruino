@@ -19,7 +19,7 @@
 #include <c_types.h>
 #include <user_interface.h>
 #include <mem.h>
-#include <osapi.h>
+#include "osapi_release.h"
 #include <ping.h>
 #include <espconn.h>
 #include <espmissingincludes.h>
@@ -308,7 +308,10 @@ JsVar *jswrap_ESP8266_crc32(JsVar *jsData) {
    ["pin", "pin", "Pin for output signal."],
    ["arrayOfData", "JsVar", "Array of LED data."]
  ]
-}*/
+}
+
+**This function is deprecated.** Please use `require("neopixel").write(pin, data)` instead
+*/
 void jswrap_ESP8266_neopixelWrite(Pin pin, JsVar *jsArrayOfData) {
   jswrap_neopixel_write(pin, jsArrayOfData);
 }
@@ -342,14 +345,6 @@ Connect GPIO 16 to RST to enable wakeup.
 
 **Special:** 0 microseconds cause sleep forever until external wakeup RST pull down occurs.
 
-<<<<<<< HEAD
-=======
-**Note:** unlike normal Espruino boards' 'deep sleep' mode, ESP8266
-deep sleep actually turns off the processor. After the given number of
-microseconds have elapsed, the ESP8266 will restart as if power had been
-turned off and then back on. *All contents of RAM will be lost*.
-Connect GPIO 16 to RST to enable wakeup.
->>>>>>> d1e384e36df31ceb01005c413f31523cd7d8e5a8
 */
 void   jswrap_ESP8266_deepSleep(JsVar *jsMicros, JsVar *jsOption) {
   if (!jsvIsInt(jsMicros)) {

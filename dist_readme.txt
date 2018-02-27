@@ -35,6 +35,10 @@ espruino_#v##_puckjs.zip
    - The firmware image for Espruino Puck.js Devices
      See http://www.espruino.com/Puck.js#firmware-updates for more information
 
+espruino_#v##_pixljs.zip
+   - The firmware image for Espruino Pixl.js Devices
+     See http://www.espruino.com/Pixl.js#firmware-updates for more information
+
 espruino_#v##_hystm32_24_ve.bin 
    - 'HY'STM32F103VET6 ARM with 2.4" LCD display
      This is available from eBay
@@ -52,6 +56,9 @@ espruino_#v##_olimexino_stm32.bin
      Espruino is now too large to fit in flash alongside it.
    - Olimexino-STM32 Arduino form factor board
    - Leaf Labs Maple Arduino form factor board
+
+espruino_#v##_stm32l496gdiscovery.bin
+   - STM32F496GDISCOVERY board
 
 espruino_#v##_stm32vldiscovery.bin
    - STM32VLDISCOVERY board
@@ -78,9 +85,18 @@ espruino_#v##_microbit.hex
    - Espruino for the BBC micro:bit - just copy this file onto the
    flash drive that appears when you plug the micro:bit in.
 
+espruino_#v##_ruuvitag.zip
+   - The firmware image for Ruuvitag Devices
+     See http://www.espruino.com/Ruuvitag for more information
 
-ESP8266
--------
+espruino_#v##_Wio_LTE.zip
+   - The firmware image for Seed Wio LTE Devices
+     See http://www.espruino.com/WioLTE for more information
+
+
+
+ESP8266 / ESP32
+---------------
 
 See http://www.espruino.com/EspruinoESP8266 for more info
 
@@ -88,8 +104,19 @@ espruino_#v##_esp8266_combined_512.bin
    - ESP8266 'combined' port for 512k devices like ESP01
        Flash with: esptool.py write_flash 0 espruino_#v##_esp8266_combined_512.bin
 
+espruino_#v##_esp8266_4mb_combined_4096.bin
+   - ESP8266 'combined' port for 4MB devices like ESP12
+       Flash with: esptool.py write_flash 0 espruino_#v##_esp8266_combined_4096.bin
+
 espruino_#v##_esp8266
    - ESP8266 port as separate files - see README in directory for more information
+
+espruino_#v##_esp8266_4mb
+   - ESP8266 port for 4mb devices as separate files - see README in directory for more information
+
+espruino_#v##_esp32.zip
+   - The firmware image for ESP32 Devices
+     See http://www.espruino.com/ESP32 for more information
 
 
 

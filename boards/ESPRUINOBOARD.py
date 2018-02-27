@@ -34,12 +34,14 @@ info = {
    'libraries' : [
      'NET',
      'GRAPHICS',
-     'NEOPIXEL'
-     'HASHLIB'
+     'NEOPIXEL',
+     'HASHLIB',
+#     'TV', # TV had to be removed because of flash usage
      'FILESYSTEM'
    ],
    'makefile' : [
      'DEFINES+=-DESPRUINO_1V3',
+     'DEFINES+=-DSAVE_ON_FLASH_MATH', 
      'STLIB=STM32F10X_XL',
      'PRECOMPILED_OBJS+=$(ROOT)/targetlibs/stm32f1/lib/startup_stm32f10x_hd.o'
    ]
@@ -61,17 +63,8 @@ chip = {
     'address' : 0x08000000 + ((256-20)*1024),
     'page_size' : 2048, # size of pages
     'pages' : 10, # number of pages we're using
-    'flash_available' : 256-(20+10) # 20 used for code, 10 for bootloader
-  },
- 'build' : {
-   'defines' : [
-     'USE_NET',
-     'USE_GRAPHICS',
-     'USE_TV',
-     'USE_HASHLIB',
-     'USE_FILESYSTEM'
-   ]
- }
+    'flash_available' : 256-(20+10) # 20k used for code, 10k for bootloader
+  }
 };
 devices = {
   'OSC' : { 'pin_in' :  'D0',

@@ -18,12 +18,12 @@ import pinutils;
 info = {
  'name' : "RuuviTag",
  'link' :  [ "https://ruuvitag.com" ],
+ 'espruino_page_link' : 'Ruuvitag',
  'default_console' : "EV_SERIAL1",
  'default_console_tx' : "D4",
  'default_console_rx' : "D5",
  'default_console_baudrate' : "9600",
- # Number of variables can be WAY higher on this board
- 'variables' : 2000, # How many variables are allocated for Espruino to use. RAM will be overflowed if this number is too high and code won't compile.
+ 'variables' : 2250, # How many variables are allocated for Espruino to use. RAM will be overflowed if this number is too high and code won't compile.
  'bootloader' : 1,
  'binary_name' : 'espruino_%v_ruuvitag.hex',
  'build' : {
@@ -40,8 +40,11 @@ info = {
      #'TLS'
    ],
    'makefile' : [
+     'DEFINES+=-DHAL_NFC_ENGINEERING_BC_FTPAN_WORKAROUND=1', # Looks like proper production nRF52s had this issue
+     'DEFINES+=-DCONFIG_GPIO_AS_PINRESET', # Allow the reset pin to work
+     'DEFINES+=-DBLUETOOTH_NAME_PREFIX=\'"RuuviTag"\'',
      'DFU_PRIVATE_KEY=targets/nrf5x_dfu/ruuvi_open_private.pem',
-     'DFU_SETTINGS=--debug-mode'
+     'DFU_SETTINGS=--debug-mode --hw-version 52 --sd-req 0x8C'
    ]
  }
 };
@@ -59,10 +62,10 @@ chip = {
   'adc' : 1,
   'dac' : 0,
   'saved_code' : {
-    'address' : ((115 - 3) * 4096), # Bootloader takes pages 117-127 on RuuviTag, FS takes 115-116
+    'address' : ((115 - 10) * 4096), # Bootloader takes pages 117-127 on RuuviTag, FS takes 115-116
     'page_size' : 4096,
-    'pages' : 3,
-    'flash_available' : 512 - ((31 + 11 + 1 + 3)*4) # Softdevice uses 31 pages of flash, bootloader 11, code 3. Each page is 4 kb.
+    'pages' : 10,
+    'flash_available' : 512 - ((31 + 11 + 2 + 10)*4) # Softdevice uses 31 pages of flash, bootloader 11, fs 2, code 10. Each page is 4 kb.
   },
 };
 
@@ -85,6 +88,7 @@ devices = {
 #           'pin_int':'D17',
 #           'pin_sda':'D20',
 #           'pin_scl':'D19' }
+  # Pin D22 is used for clock when driving neopixels - as not specifying a pin seems to break things
 };
 
 # left-right, or top-bottom order

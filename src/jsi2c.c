@@ -90,30 +90,31 @@ static void i2c_stop(i2cInfo *inf) {
 static void i2c_wr_bit(i2cInfo *inf, bool b) {
   jshPinSetValue(inf->pinSDA, b);
   dly(inf);
-  jshPinSetValue(inf->pinSCL, 1);
+  jshPinSetValue(inf->pinSCL, 1); // stop forcing SCL
   dly(inf);
   int timeout = I2C_TIMEOUT;
   while (!jshPinGetValue(inf->pinSCL) && --timeout); // clock stretch
   if (!timeout) err("Timeout (wr)");
   jshPinSetValue(inf->pinSCL, 0);
-  jshPinSetValue(inf->pinSDA, 1); // stop forcing SDA (needed?)
+  dly(inf);  
 }
 
 static bool i2c_rd_bit(i2cInfo *inf) {
   jshPinSetValue(inf->pinSDA, 1); // stop forcing SDA
   dly(inf);
-  jshPinSetValue(inf->pinSCL, 1); // stop forcing SDA
+  jshPinSetValue(inf->pinSCL, 1); // stop forcing SCL
   int timeout = I2C_TIMEOUT;
   while (!jshPinGetValue(inf->pinSCL) && --timeout); // clock stretch
   if (!timeout) err("Timeout (rd)");
   dly(inf);
   bool b = jshPinGetValue(inf->pinSDA);
   jshPinSetValue(inf->pinSCL, 0);
+  dly(inf);
   return b;
 }
 
 // true on ack, false on nack
-static bool i2c_wr(i2cInfo *inf, uint8_t data) {
+static bool i2c_wr(i2cInfo *inf, int data) {
   int i;
   for (i=0;i<8;i++) {
     i2c_wr_bit(inf, data&128);
@@ -122,12 +123,13 @@ static bool i2c_wr(i2cInfo *inf, uint8_t data) {
   return !i2c_rd_bit(inf);
 }
 
-static uint8_t i2c_rd(i2cInfo *inf, bool nack) {
+static int i2c_rd(i2cInfo *inf, bool nack) {
   int i;
   int data = 0;
   for (i=0;i<8;i++)
     data = (data<<1) | (i2c_rd_bit(inf)?1:0);
   i2c_wr_bit(inf, nack);
+  jshPinSetValue(inf->pinSDA, 1); // stop forcing SDA
   return data;
 }
 
@@ -164,7 +166,7 @@ void jsi2cRead(JshI2CInfo *inf, unsigned char address, int nBytes, unsigned char
   i2c_wr(&d, 1|(address<<1));
   int i;
   for (i=0;i<nBytes;i++)
-    data[i] = i2c_rd(&d, i==nBytes-1);
+    data[i] = (unsigned char)i2c_rd(&d, i==nBytes-1);
   if (sendStop) i2c_stop(&d);
   inf->started = d.started;
 }

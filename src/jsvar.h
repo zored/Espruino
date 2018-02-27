@@ -306,7 +306,7 @@ void jsvSetMemoryTotal(unsigned int jsNewVarCount);
 JsVar *jsvNewWithFlags(JsVarFlags flags); ///< Create a new variable with the given flags
 JsVar *jsvNewFlatStringOfLength(unsigned int byteLength); ///< Try and create a special flat string
 JsVar *jsvNewFromString(const char *str); ///< Create a new string
-JsVar *jsvNewStringOfLength(unsigned int byteLength); ///< Create a new string of the given length - full of 0s
+JsVar *jsvNewStringOfLength(unsigned int byteLength, const char *initialData); ///< Create a new string of the given length - full of 0s (or initialData if specified)
 static ALWAYS_INLINE JsVar *jsvNewFromEmptyString() { JsVar *v = jsvNewWithFlags(JSV_STRING_0); return v; } ;///< Create a new empty string
 static ALWAYS_INLINE JsVar *jsvNewNull() { return jsvNewWithFlags(JSV_NULL); } ;///< Create a new null variable
 /** Create a new variable from a substring. argument must be a string. stridx = start char or str, maxLength = max number of characters (can be JSVAPPENDSTRINGVAR_MAXLENGTH)  */
@@ -324,6 +324,7 @@ JsVar *jsvNewObject(); ///< Create a new object
 JsVar *jsvNewEmptyArray(); ///< Create a new array
 JsVar *jsvNewArray(JsVar **elements, int elementCount); ///< Create an array containing the given elements
 JsVar *jsvNewNativeFunction(void (*ptr)(void), unsigned short argTypes); ///< Create an array containing the given elements
+JsVar *jsvNewNativeString(char *ptr, size_t len); ///< Create a Native String pointing to the given memory area
 JsVar *jsvNewArrayBufferFromString(JsVar *str, unsigned int lengthOrZero); ///< Create a new ArrayBuffer backed by the given string. If length is not specified, it will be worked out
 
 void *jsvGetNativeFunctionPtr(const JsVar *function); ///< Get the actual pointer from a native function - this may not be the contents of varData.native.ptr
@@ -350,6 +351,8 @@ ALWAYS_INLINE void jsvUnLock(JsVar *var);
 void jsvUnLock2(JsVar *var1, JsVar *var2);
 /// Unlock 3 variables in one go
 void jsvUnLock3(JsVar *var1, JsVar *var2, JsVar *var3);
+/// Unlock 4 variables in one go
+void jsvUnLock4(JsVar *var1, JsVar *var2, JsVar *var3, JsVar *var4);
 
 /// Unlock an array of variables
 NO_INLINE void jsvUnLockMany(unsigned int count, JsVar **vars);
@@ -366,46 +369,46 @@ JsVarRef jsvRefRef(JsVarRef ref);
 /// Helper fn, Unreference - set this variable as not used by anything
 JsVarRef jsvUnRefRef(JsVarRef ref);
 
-extern ALWAYS_INLINE bool jsvIsRoot(const JsVar *v);
-extern ALWAYS_INLINE bool jsvIsPin(const JsVar *v);
-extern ALWAYS_INLINE bool jsvIsSimpleInt(const JsVar *v); ///< is just a very basic integer value
-extern ALWAYS_INLINE bool jsvIsInt(const JsVar *v);
-extern ALWAYS_INLINE bool jsvIsFloat(const JsVar *v);
-extern ALWAYS_INLINE bool jsvIsBoolean(const JsVar *v);
-extern ALWAYS_INLINE bool jsvIsString(const JsVar *v); ///< String, or a NAME too
-extern ALWAYS_INLINE bool jsvIsBasicString(const JsVar *v); ///< Just a string (NOT a name)
-extern ALWAYS_INLINE bool jsvIsStringExt(const JsVar *v); ///< The extra bits dumped onto the end of a string to store more data
-extern ALWAYS_INLINE bool jsvIsFlatString(const JsVar *v);
-extern ALWAYS_INLINE bool jsvIsNativeString(const JsVar *v);
-extern ALWAYS_INLINE bool jsvIsNumeric(const JsVar *v);
-extern ALWAYS_INLINE bool jsvIsFunction(const JsVar *v);
-extern ALWAYS_INLINE bool jsvIsFunctionReturn(const JsVar *v); ///< Is this a function with an implicit 'return' at the start?
-extern ALWAYS_INLINE bool jsvIsFunctionParameter(const JsVar *v);
-extern ALWAYS_INLINE bool jsvIsObject(const JsVar *v);
-extern ALWAYS_INLINE bool jsvIsArray(const JsVar *v);
-extern ALWAYS_INLINE bool jsvIsArrayBuffer(const JsVar *v);
-extern ALWAYS_INLINE bool jsvIsArrayBufferName(const JsVar *v);
-extern ALWAYS_INLINE bool jsvIsNative(const JsVar *v);
-extern ALWAYS_INLINE bool jsvIsNativeFunction(const JsVar *v);
-extern ALWAYS_INLINE bool jsvIsUndefined(const JsVar *v);
-extern ALWAYS_INLINE bool jsvIsNull(const JsVar *v);
-extern ALWAYS_INLINE bool jsvIsBasic(const JsVar *v); ///< Is this *not* an array/object/etc
-extern ALWAYS_INLINE bool jsvIsName(const JsVar *v); ///< NAMEs are what's used to name a variable (it is not the data itself)
+extern bool jsvIsRoot(const JsVar *v);
+extern bool jsvIsPin(const JsVar *v);
+extern bool jsvIsSimpleInt(const JsVar *v); ///< is just a very basic integer value
+extern bool jsvIsInt(const JsVar *v);
+extern bool jsvIsFloat(const JsVar *v);
+extern bool jsvIsBoolean(const JsVar *v);
+extern bool jsvIsString(const JsVar *v); ///< String, or a NAME too
+extern bool jsvIsBasicString(const JsVar *v); ///< Just a string (NOT a name)
+extern bool jsvIsStringExt(const JsVar *v); ///< The extra bits dumped onto the end of a string to store more data
+extern bool jsvIsFlatString(const JsVar *v);
+extern bool jsvIsNativeString(const JsVar *v);
+extern bool jsvIsNumeric(const JsVar *v);
+extern bool jsvIsFunction(const JsVar *v);
+extern bool jsvIsFunctionReturn(const JsVar *v); ///< Is this a function with an implicit 'return' at the start?
+extern bool jsvIsFunctionParameter(const JsVar *v);
+extern bool jsvIsObject(const JsVar *v);
+extern bool jsvIsArray(const JsVar *v);
+extern bool jsvIsArrayBuffer(const JsVar *v);
+extern bool jsvIsArrayBufferName(const JsVar *v);
+extern bool jsvIsNative(const JsVar *v);
+extern bool jsvIsNativeFunction(const JsVar *v);
+extern bool jsvIsUndefined(const JsVar *v);
+extern bool jsvIsNull(const JsVar *v);
+extern bool jsvIsBasic(const JsVar *v); ///< Is this *not* an array/object/etc
+extern bool jsvIsName(const JsVar *v); ///< NAMEs are what's used to name a variable (it is not the data itself)
 /// Names with values have firstChild set to a value - AND NOT A REFERENCE
-extern ALWAYS_INLINE bool jsvIsNameWithValue(const JsVar *v);
-extern ALWAYS_INLINE bool jsvIsNameInt(const JsVar *v);
-extern ALWAYS_INLINE bool jsvIsNameIntInt(const JsVar *v);
-extern ALWAYS_INLINE bool jsvIsNameIntBool(const JsVar *v);
+extern bool jsvIsNameWithValue(const JsVar *v);
+extern bool jsvIsNameInt(const JsVar *v);
+extern bool jsvIsNameIntInt(const JsVar *v);
+extern bool jsvIsNameIntBool(const JsVar *v);
 /// What happens when we access a variable that doesn't exist. We get a NAME where the next + previous siblings point to the object that may one day contain them
-extern ALWAYS_INLINE bool jsvIsNewChild(const JsVar *v);
+extern bool jsvIsNewChild(const JsVar *v);
 
 /// Are var.varData.ref.* (excl pad) used for data (so we expect them not to be empty)
-extern ALWAYS_INLINE bool jsvIsRefUsedForData(const JsVar *v);
+extern bool jsvIsRefUsedForData(const JsVar *v);
 
 /// Can the given variable be converted into an integer without loss of precision
-extern ALWAYS_INLINE bool jsvIsIntegerish(const JsVar *v);
+extern bool jsvIsIntegerish(const JsVar *v);
 
-extern ALWAYS_INLINE bool jsvIsIterable(const JsVar *v);
+extern bool jsvIsIterable(const JsVar *v);
 
 /** Does this string contain only Numeric characters (with optional whitespace and/or '-'/'+' at the front)? NOT '.'/'e' and similar (allowDecimalPoint is for '.' only) */
 bool jsvIsStringNumericInt(const JsVar *var, bool allowDecimalPoint);
@@ -429,64 +432,13 @@ static ALWAYS_INLINE bool jsvHasRef(const JsVar *v) { return !jsvIsStringExt(v);
 
 /** Return the is the number of characters this one JsVar can contain, NOT string length (eg, a chain of JsVars)
  * This will return an invalid length when applied to Flat Strings */
-static ALWAYS_INLINE size_t jsvGetMaxCharactersInVar(const JsVar *v) {
-  // see jsvCopy - we need to know about this in there too
-  if (jsvIsStringExt(v)) return JSVAR_DATA_STRING_MAX_LEN;
-  assert(jsvHasCharacterData(v));
-  if (jsvIsName(v)) return JSVAR_DATA_STRING_NAME_LEN;
-  return JSVAR_DATA_STRING_LEN;
-}
+size_t jsvGetMaxCharactersInVar(const JsVar *v);
 
 /// This is the number of characters a JsVar can contain, NOT string length
-static ALWAYS_INLINE size_t jsvGetCharactersInVar(const JsVar *v) {
-  unsigned int f = v->flags&JSV_VARTYPEMASK;
-  if (f == JSV_FLAT_STRING)
-    return (size_t)v->varData.integer;
-  if (f == JSV_NATIVE_STRING)
-    return (size_t)v->varData.nativeStr.len;
-  assert(f >= JSV_NAME_STRING_INT_0);
-  assert((JSV_NAME_STRING_INT_0 < JSV_NAME_STRING_0) &&
-         (JSV_NAME_STRING_0 < JSV_STRING_0) &&
-         (JSV_STRING_0 < JSV_STRING_EXT_0)); // this relies on ordering
-  if (f<=JSV_NAME_STRING_MAX) {
-    if (f<=JSV_NAME_STRING_INT_MAX)
-      return f-JSV_NAME_STRING_INT_0;
-    else
-      return f-JSV_NAME_STRING_0;
-  } else {
-    if (f<=JSV_STRING_MAX) return f-JSV_STRING_0;
-    assert(f <= JSV_STRING_EXT_MAX);
-    return f - JSV_STRING_EXT_0;
-  }
-}
+size_t jsvGetCharactersInVar(const JsVar *v);
 
 /// This is the number of characters a JsVar can contain, NOT string length
-static ALWAYS_INLINE void jsvSetCharactersInVar(JsVar *v, size_t chars) {
-  unsigned int f = v->flags&JSV_VARTYPEMASK;
-  assert(!(jsvIsFlatString(v) || jsvIsNativeString(v)));
-
-  JsVarFlags m = (JsVarFlags)(v->flags&~JSV_VARTYPEMASK);
-  assert(f >= JSV_NAME_STRING_INT_0);
-  assert((JSV_NAME_STRING_INT_0 < JSV_NAME_STRING_0) &&
-         (JSV_NAME_STRING_0 < JSV_STRING_0) &&
-         (JSV_STRING_0 < JSV_STRING_EXT_0)); // this relies on ordering
-  if (f<=JSV_NAME_STRING_MAX) {
-    assert(chars <= JSVAR_DATA_STRING_NAME_LEN);
-    if (f<=JSV_NAME_STRING_INT_MAX)
-      v->flags = (JsVarFlags)(m | (JSV_NAME_STRING_INT_0+chars));
-    else
-      v->flags = (JsVarFlags)(m | (JSV_NAME_STRING_0+chars));
-  } else {
-    if (f<=JSV_STRING_MAX) {
-      assert(chars <= JSVAR_DATA_STRING_LEN);
-      v->flags = (JsVarFlags)(m | (JSV_STRING_0+chars));
-    } else {
-      assert(chars <= JSVAR_DATA_STRING_MAX_LEN);
-      assert(f <= JSV_STRING_EXT_MAX);
-      v->flags = (JsVarFlags)(m | (JSV_STRING_EXT_0+chars));
-    }
-  }
-}
+void jsvSetCharactersInVar(JsVar *v, size_t chars);
 
 /** Check if two Basic Variables are equal (this IGNORES the value that is pointed to,
  * so 'a=5'=='a=7' but 'a=5'!='b=5')
@@ -633,7 +585,7 @@ JsVar *jsvNegateAndUnLock(JsVar *v);
 JsVar *jsvGetPathTo(JsVar *root, JsVar *element, int maxDepth, JsVar *ignoreParent);
 
 /// Copy this variable and return the locked copy
-JsVar *jsvCopy(JsVar *src);
+JsVar *jsvCopy(JsVar *src, bool copyChildren);
 /** Copy only a name, not what it points to. ALTHOUGH the link to what it points to is maintained unless linkChildren=false.
     If keepAsName==false, this will be converted into a normal variable */
 JsVar *jsvCopyNameOnly(JsVar *src, bool linkChildren, bool keepAsName);
@@ -653,6 +605,8 @@ void jsvRemoveAllChildren(JsVar *parent);
 JsVar *jsvObjectGetChild(JsVar *obj, const char *name, JsVarFlags createChild);
 /// Set the named child of an object, and return the child (so you can choose to unlock it if you want)
 JsVar *jsvObjectSetChild(JsVar *obj, const char *name, JsVar *child);
+/// Set the named child of an object, and return the child (so you can choose to unlock it if you want)
+JsVar *jsvObjectSetChildVar(JsVar *obj, JsVar *name, JsVar *child);
 /// Set the named child of an object, and unlock the child
 void jsvObjectSetChildAndUnLock(JsVar *obj, const char *name, JsVar *child);
 /// Remove the named child of an Object
@@ -660,6 +614,8 @@ void jsvObjectRemoveChild(JsVar *parent, const char *name);
 /** Set the named child of an object, and return the child (so you can choose to unlock it if you want).
  * If the child is 0, the 'name' is also removed from the object */
 JsVar *jsvObjectSetOrRemoveChild(JsVar *obj, const char *name, JsVar *child);
+/** Append all keys from the source object to the target object. Will ignore hidden/internal fields */
+void jsvObjectAppendAll(JsVar *target, JsVar *source);
 
 int jsvGetChildren(const JsVar *v); ///< number of children of a variable. also see jsvGetArrayLength and jsvGetLength
 JsVar *jsvGetFirstName(JsVar *v); ///< Get the first child's name from an object,array or function
@@ -673,10 +629,12 @@ JsVar *jsvGetArrayIndex(const JsVar *arr, JsVarInt index); ///< Get a 'name' at 
 JsVar *jsvGetArrayItem(const JsVar *arr, JsVarInt index); ///< Get an item at the specified index in the array if it exists (and lock it)
 void jsvSetArrayItem(JsVar *arr, JsVarInt index, JsVar *item); ///< Set an array item at the specified index in the array
 void jsvGetArrayItems(JsVar *arr, unsigned int itemCount, JsVar **itemPtr); ///< Get all elements from arr and put them in itemPtr (unless it'd overflow). Makes sure all of itemPtr either contains a JsVar or 0
-JsVar *jsvGetArrayIndexOf(JsVar *arr, JsVar *value, bool matchExact); ///< Get the index of the value in the array (matchExact==use pointer, not equality check)
+JsVar *jsvGetIndexOfFull(JsVar *arr, JsVar *value, bool matchExact, bool matchIntegerIndices, int startIdx); ///< Get the index of the value in the array (matchExact==use pointer not equality check, matchIntegerIndices = don't check non-integers)
+JsVar *jsvGetIndexOf(JsVar *arr, JsVar *value, bool matchExact); ///< Get the index of the value in the array or object (matchExact==use pointer, not equality check)
 JsVarInt jsvArrayAddToEnd(JsVar *arr, JsVar *value, JsVarInt initialValue); ///< Adds new elements to the end of an array, and returns the new length. initialValue is the item index when no items are currently in the array.
 JsVarInt jsvArrayPush(JsVar *arr, JsVar *value); ///< Adds a new element to the end of an array, and returns the new length
 JsVarInt jsvArrayPushAndUnLock(JsVar *arr, JsVar *value); ///< Adds a new element to the end of an array, unlocks it, and returns the new length
+void jsvArrayPushAll(JsVar *target, JsVar *source, bool checkDuplicates); ///< Append all values from the source array to the target array
 JsVar *jsvArrayPop(JsVar *arr); ///< Removes the last element of an array, and returns that element (or 0 if empty). includes the NAME
 JsVar *jsvArrayPopFirst(JsVar *arr); ///< Removes the first element of an array, and returns that element (or 0 if empty) includes the NAME. DOES NOT RENUMBER.
 void jsvArrayAddUnique(JsVar *arr, JsVar *v); ///< Adds a new variable element to the end of an array (IF it was not already there). Return true if successful
@@ -684,15 +642,19 @@ JsVar *jsvArrayJoin(JsVar *arr, JsVar *filler); ///< Join all elements of an arr
 void jsvArrayInsertBefore(JsVar *arr, JsVar *beforeIndex, JsVar *element); ///< Insert a new element before beforeIndex, DOES NOT UPDATE INDICES
 static ALWAYS_INLINE bool jsvArrayIsEmpty(JsVar *arr) { assert(jsvIsArray(arr)); return !jsvGetFirstChild(arr); } ///< Return true is array is empty
 
+
+
 /** Write debug info for this Var out to the console */
 void jsvTrace(JsVar *var, int indent);
 
-/** Run a garbage collection sweep - return true if things have been freed */
-bool jsvGarbageCollect();
+/** Run a garbage collection sweep - return nonzero if things have been freed */
+int jsvGarbageCollect();
 
 #ifndef RELEASE
 // Dump any locked variables that aren't referenced from `global` - for debugging memory leaks
 void jsvDumpLockedVars();
+// Dump the free list - in order
+void jsvDumpFreeList();
 #endif
 
 /** Remove whitespace to the right of a string - on MULTIPLE LINES */
@@ -722,6 +684,9 @@ typedef struct {
  */
 bool jsvReadConfigObject(JsVar *object, jsvConfigObject *configs, int nConfigs);
 
+/// Is the variable an instance of the given class. Eg. `jsvIsInstanceOf(e, "Error")` - does a simple, non-recursive check that doesn't take account of builtins like String
+bool jsvIsInstanceOf(JsVar *var, const char *constructorName);
+
 /// Create a new typed array of the given type and length
 JsVar *jsvNewTypedArray(JsVarDataArrayBufferViewType type, JsVarInt length);
 
@@ -734,6 +699,9 @@ JsVar *jsvNewDataViewWithData(JsVarInt length, unsigned char *data);
  * to the contiguous memory area containing it. Returns 0 if it was unable to
  * allocate it. */
 JsVar *jsvNewArrayBufferWithPtr(unsigned int length, char **ptr);
+
+/** create an arraybuffer containing the given data */
+JsVar *jsvNewArrayBufferWithData(JsVarInt length, unsigned char *data);
 
 /** Allocate a flat area of memory inside Espruino's Variable storage space.
  * This may return 0 on failure.

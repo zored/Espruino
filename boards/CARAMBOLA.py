@@ -17,6 +17,7 @@ import pinutils;
 info = {
  'name' : "Carambola",
  'default_console' : "EV_USBSERIAL",
+ 'variables' :  0, # 0 = resizable variables, rather than fixed
  'binary_name' : 'espruino_%v_raspberrypi',
  'build' : {
    'libraries' : [
@@ -38,8 +39,8 @@ chip = {
   'part' : "CARAMBOLA",
   'family' : "LINUX",
   'package' : "",
-  'ram' : -1,
-  'flash' : -1,
+  'ram' : 0,
+  'flash' : 256, # size of file used to fake flash memory (kb)
   'speed' : -1,
   'usart' : 1,
   'spi' : 1,

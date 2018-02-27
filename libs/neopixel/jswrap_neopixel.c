@@ -24,6 +24,9 @@
 #ifdef ESP32
 #include "esp32_neopixel.h"
 #endif
+#ifdef WIO_LTE
+#include "stm32_ws2812b_driver.h"
+#endif
 
 #include <jswrap_neopixel.h>
 #include "jsvariterator.h"
@@ -61,11 +64,12 @@ attached to the given pin.
 ```
 // set just one pixel, red, green, blue
 require("neopixel").write(B15, [255,0,0]);
+```
 
+```
 // Produce an animated rainbow over 25 LEDs
 var rgb = new Uint8ClampedArray(25*3);
 var pos = 0;
-
 function getPattern() {
   pos++;
   for (var i=0;i<rgb.length;) {
@@ -75,7 +79,6 @@ function getPattern() {
   }
   return rgb;
 }
-
 setInterval(function() {
   require("neopixel").write(B15, getPattern());
 }, 100);
@@ -122,7 +125,13 @@ void jswrap_neopixel_write(Pin pin, JsVar *data) {
 // -------------------------------------------------------------- Platform specific
 // -----------------------------------------------------------------------------------
 
-#if defined(STM32) // ----------------------------------------------------------------
+#if defined(WIO_LTE)
+
+bool neopixelWrite(Pin pin, unsigned char *rgbData, size_t rgbSize) {
+  return stm32_neopixelWrite(pin, rgbData, rgbSize);
+}
+
+#elif defined(STM32) // ----------------------------------------------------------------
 
 // this one could potentially work on other platforms as well...
 bool neopixelWrite(Pin pin, unsigned char *rgbData, size_t rgbSize) {
