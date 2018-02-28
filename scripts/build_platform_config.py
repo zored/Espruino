@@ -250,7 +250,7 @@ codeOut("""
 #define IOBUFFER_XOFF ((TXBUFFERMASK)*6/8)
 // When to send the message that we can start receiving again
 #define IOBUFFER_XON ((TXBUFFERMASK)*3/8)
-
+#define DEFAULT_BUSY_PIN_INDICATOR (Pin)-1 // no indicator
 #define DEFAULT_SLEEP_PIN_INDICATOR (Pin)-1 // no indicator
 """);
 
