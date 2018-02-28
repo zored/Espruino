@@ -829,7 +829,7 @@ void jsiSemiInit(bool autoLoad) {
           "/___//____//_/|_|/_/    \\__,_/\n"
           "\n"
           "Based on Espruino " JS_VERSION "\n"
-          "(c) 2016 G.Williams, Amperka LLC\n"
+          "(c) 2018 G.Williams, Amperka LLC\n"
           "Support the work of core developers:\n"
           "http://espruino.com/Donate\n"
 #else
@@ -838,7 +838,7 @@ void jsiSemiInit(bool autoLoad) {
           "|   __|_ -| . |  _| | | |   | . |\n"
           "|_____|___|  _|_| |___|_|_|_|___|\n"
           "          |_| http://espruino.com\n"
-          " "JS_VERSION" Copyright 2016 G.Williams\n"
+          " "JS_VERSION" Copyright 2018 G.Williams\n"
 
 #if !defined(PICO) && !defined(ESPRUINOBOARD) && !defined(ESPRUINOWIFI) && !defined(PUCKJS) && !defined(PIXLJS)
           "\n"
