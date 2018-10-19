@@ -34,7 +34,7 @@ info = {
    'makefile' : [
      'SAVE_ON_FLASH=1',
      'DEFINES+=-DCONFIG_GPIO_AS_PINRESET', # Allow the reset pin to work
-     'DEFINES+=-DUSE_DEBUGGER -DUSE_TAB_COMPLETE',
+     'DEFINES+=-DUSE_TAB_COMPLETE', # Removed -DUSE_DEBUGGER due to firmware size issues
      'INCLUDE += -I$(ROOT)/libs/microbit',
      'WRAPPERSOURCES += libs/microbit/jswrap_microbit.c'
    ]
@@ -55,10 +55,10 @@ chip = {
    # If using DFU bootloader, it sits at 0x3C000 - 0x40000 (0x40000 is end of flash)
    # Might want to change 256 -> 240 in the code below
   'saved_code' : {
-    'address' : ((256 - 3) * 1024),
+    'address' : ((256 - 2) * 1024),
     'page_size' : 1024,
-    'pages' : 3,
-    'flash_available' : (256 - 108 - 3) # total flash pages - softdevice - saved code
+    'pages' : 2,
+    'flash_available' : (256 - 108 - 2) # total flash pages - softdevice - saved code
   }
 };
 

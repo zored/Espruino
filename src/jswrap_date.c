@@ -31,11 +31,7 @@ const char *DAYNAMES = "Sun\0Mon\0Tue\0Wed\0Thu\0Fri\0Sat";
 
 /// return time zone in minutes
 static int getTimeZone() {
-#ifdef SAVE_ON_FLASH
-  return 0;
-#else
   return jsvGetIntegerAndUnLock(jsvObjectGetChild(execInfo.hiddenRoot, JS_TIMEZONE_VAR, 0));
-#endif
 }
 
 /* NOTE: we use / and % here because the compiler is smart enough to
@@ -156,6 +152,14 @@ static int getDay(const char *s) {
   return -1;
 }
 
+static TimeInDay getTimeFromDateVar(JsVar *date, bool forceGMT) {
+  return getTimeFromMilliSeconds(jswrap_date_getTime(date), forceGMT);
+}
+
+static CalendarDate getCalendarDateFromDateVar(JsVar *date, bool forceGMT) {
+  return getCalendarDate(getTimeFromDateVar(date, forceGMT).daysSinceEpoch);
+}
+
 /*JSON{
   "type" : "class",
   "class" : "Date"
@@ -237,16 +241,20 @@ JsVar *jswrap_date_constructor(JsVar *args) {
 
 /*JSON{
   "type" : "method",
+  "ifndef" : "SAVE_ON_FLASH",
   "class" : "Date",
   "name" : "getTimezoneOffset",
   "generate" : "jswrap_date_getTimezoneOffset",
-  "return" : ["float","The difference, in minutes, between UTC and local time"]
+  "return" : ["int32","The difference, in minutes, between UTC and local time"]
 }
-The getTimezoneOffset() method returns the time-zone offset from UTC, in minutes, for the current locale.
+This returns Espruino's time-zone offset from UTC, in minutes.
+
+This is set with `E.setTimeZone` and is System-wide. The value returned
+has nothing to do with the instance of `Date` that it is called on.
+
  */
-JsVarFloat jswrap_date_getTimezoneOffset(JsVar *parent) {
-  NOT_USED(parent);
-  return 0;
+int jswrap_date_getTimezoneOffset(JsVar *parent) {
+  return -getTimeFromDateVar(parent, false/*system timezone*/).zone;
 }
 
 
@@ -274,7 +282,7 @@ JsVarFloat jswrap_date_getTime(JsVar *date) {
 /*JSON{
   "type" : "method",
   "class" : "Date",
-  "name" : "getTime",
+  "name" : "setTime",
   "generate" : "jswrap_date_setTime",
   "params" : [
     ["timeValue","float","the number of milliseconds since 1970"]
@@ -287,15 +295,6 @@ JsVarFloat jswrap_date_setTime(JsVar *date, JsVarFloat timeValue) {
   if (date)
     jsvObjectSetChildAndUnLock(date, "ms", jsvNewFromFloat(timeValue));
   return timeValue;
-}
-
-
-static TimeInDay getTimeFromDateVar(JsVar *date, bool forceGMT) {
-  return getTimeFromMilliSeconds(jswrap_date_getTime(date), forceGMT);
-}
-
-static CalendarDate getCalendarDateFromDateVar(JsVar *date, bool forceGMT) {
-  return getCalendarDate(getTimeFromDateVar(date, forceGMT).daysSinceEpoch);
 }
 
 
@@ -642,11 +641,11 @@ JsVar *jswrap_date_toISOString(JsVar *parent) {
 }
 
 static JsVarInt _parse_int() {
-  return (int)stringToIntWithRadix(jslGetTokenValueAsString(), 10, 0);
+  return (int)stringToIntWithRadix(jslGetTokenValueAsString(), 10, NULL, NULL);
 }
 
 static bool _parse_time(TimeInDay *time, int initialChars) {
-  time->hour = (int)stringToIntWithRadix(&jslGetTokenValueAsString()[initialChars], 10, 0);
+  time->hour = (int)stringToIntWithRadix(&jslGetTokenValueAsString()[initialChars], 10, NULL, NULL);
   jslGetNextToken();
   if (lex->tk==':') {
     jslGetNextToken();

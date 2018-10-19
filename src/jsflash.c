@@ -225,8 +225,9 @@ static uint32_t jsfGetAddressOfNextStartPage(uint32_t addr) {
   return next;
 }
 
-// Get the amount of space free in this page
-static uint32_t jsfGetFreeSpace(uint32_t addr, bool allPages) {
+// Get the amount of space free in this page (or all pages). addr=0 uses start page
+uint32_t jsfGetFreeSpace(uint32_t addr, bool allPages) {
+  if (!addr) addr=JSF_START_ADDRESS;
   uint32_t pageEndAddr = JSF_END_ADDRESS;
   if (!allPages) {
     uint32_t pageAddr,pageLen;
@@ -358,13 +359,15 @@ static uint32_t jsfCreateFile(JsfFileName name, uint32_t size, JsfFileFlags flag
     uint32_t existingAddr = 0;
     // Find a hole that's big enough for our file
     do {
-      if (addr!=startAddr) addr = jsfGetAddressOfNextPage(addr);
       if (jsfGetFileHeader(addr, &header)) do {
         // check for something with the same name
         if (header.replacement == JSF_WORD_UNSET &&
             header.name == name)
           existingAddr = addr;
       } while (jsfGetNextFileHeader(&addr, &header, GNFH_GET_EMPTY));
+      // If not enough space, skip to next page
+      if (jsfGetSpaceLeftInPage(addr)<requiredSize)
+        addr = jsfGetAddressOfNextPage(addr);
     } while (addr && (jsfGetSpaceLeftInPage(addr)<requiredSize));
     // do we have an existing file? Erase it.
     if (existingAddr) {
@@ -491,7 +494,7 @@ bool jsfWriteFile(JsfFileName name, JsVar *data, JsfFileFlags flags, JsVarInt of
   uint32_t size = (uint32_t)_size;
   // Data length
   JSV_GET_AS_CHAR_ARRAY(dPtr, dLen, data);
-  if (!dPtr || !dLen) return false;
+  if (!dPtr) return false;
   if (size==0) size=(uint32_t)dLen;
   // Lookup file
   JsfFileHeader header;
@@ -505,6 +508,7 @@ bool jsfWriteFile(JsfFileName name, JsVar *data, JsfFileFlags flags, JsVarInt of
     if (addr && offset==0 &&
         size==jsfGetFileSize(&header) &&
         flags==jsfGetFileFlags(&header) &&
+        dLen==size && // setting all in one go
         jsfIsEqual(addr, (unsigned char*)dPtr, (uint32_t)dLen)) {
       DBG("Equal\n");
       return true;
@@ -578,16 +582,24 @@ JsVar *jsfListFiles() {
   return files;
 }
 
+
 // ------------------------------------------------------------------------------------------------
 // ------------------------------------------------------------------------------------------------
 // ------------------------------------------------------------------------ For loading/saving code to flash
 // ------------------------------------------------------------------------------------------------
 // ------------------------------------------------------------------------------------------------
 
-// cbdata = uint32_t
-void jsfSaveToFlash_countcb(unsigned char ch, uint32_t *cbdata) {
-  NOT_USED(ch);
-  cbdata[0]++;
+// Get a hash of the current Git commit, so new builds won't load saved code
+static uint32_t getBuildHash() {
+#ifdef GIT_COMMIT
+  const unsigned char *s = (unsigned char*)STRINGIFY(GIT_COMMIT);
+  uint32_t hash = 0;
+  while (*s)
+    hash = (hash<<1) ^ *(s++);
+  return hash;
+#else
+  return 0;
+#endif
 }
 
 typedef struct {
@@ -637,13 +649,12 @@ void jsfSaveToFlash() {
   // Try and compact, just to ensure we get the maximum amount saved
   jsfCompact();
   jsiConsolePrint("Calculating Size...\n");
-  // Work out how much data this'll take
-  uint32_t compressedSize = 0;
-  COMPRESS(varPtr, varSize, jsfSaveToFlash_countcb, &compressedSize);
+  // Work out how much data this'll take, plus 4 bytes for build hash
+  uint32_t compressedSize = 4 + COMPRESS(varPtr, varSize, NULL, NULL);
   // How much data do we have?
   uint32_t savedCodeAddr = jsfCreateFile(jsfNameFromString(SAVED_CODE_VARIMAGE), compressedSize, JSFF_COMPRESSED, JSF_START_ADDRESS, 0);
   if (!savedCodeAddr) {
-    jsiConsolePrintf("ERROR: Too big to save to flash (%d vs %d bytes)\n", compressedSize, jsfGetFreeSpace(JSF_START_ADDRESS,true));
+    jsiConsolePrintf("ERROR: Too big to save to flash (%d vs %d bytes)\n", compressedSize, jsfGetFreeSpace(0,true));
     jsvSoftInit();
     jspSoftInit();
     jsiConsolePrint("Deleting command history and trying again...\n");
@@ -666,6 +677,12 @@ void jsfSaveToFlash() {
   cbData.address = savedCodeAddr;
   cbData.endAddress = jsfAlignAddress(savedCodeAddr+compressedSize);
   jsiConsolePrint("Writing..");
+  // write the hash
+  uint32_t hash = getBuildHash();
+  int i;
+  for (i=0;i<4;i++)
+    jsfSaveToFlash_writecb(((unsigned char*)&hash)[i], (uint32_t*)&cbData);
+  // write compressed data
   COMPRESS(varPtr, varSize, jsfSaveToFlash_writecb, (uint32_t*)&cbData);
   jsfSaveToFlash_finish(&cbData);
   jsiConsolePrintf("\nCompressed %d bytes to %d\n", varSize, compressedSize);
@@ -686,6 +703,15 @@ void jsfLoadStateFromFlash() {
   jsfcbData cbData;
   cbData.address = savedCode;
   cbData.endAddress = savedCode+jsfGetFileSize(&header);
+
+  uint32_t hash;
+  int i;
+  for (i=0;i<4;i++)
+    ((char*)&hash)[i] = (char)jsfLoadFromFlash_readcb((uint32_t*)&cbData);
+  if (hash != getBuildHash()) {
+    jsiConsolePrintf("Not loading saved code from different Espruino firmware.\n");
+    return;
+  }
   jsiConsolePrintf("Loading %d bytes from flash...\n", jsfGetFileSize(&header));
   DECOMPRESS(jsfLoadFromFlash_readcb, (uint32_t*)&cbData, varPtr);
 }
@@ -705,6 +731,15 @@ JsVar *jsfGetBootCodeFromFlash(bool isReset) {
 }
 
 bool jsfLoadBootCodeFromFlash(bool isReset) {
+  // Load code in .boot0/1/2/3
+  char filename[6] = ".bootX";
+  for (int i=0;i<4;i++) {
+    filename[5] = (char)('0'+i);
+    JsVar *code = jsfReadFile(jsfNameFromString(filename));
+    if (code)
+      jsvUnLock2(jspEvaluateVar(code,0,0), code);
+  }
+  // Load normal boot code
   JsVar *code = jsfGetBootCodeFromFlash(isReset);
   if (!code) return false;
   jsvUnLock2(jspEvaluateVar(code,0,0), code);
