@@ -266,6 +266,7 @@ src/jsinteractive.c \
 src/jsdevices.c \
 src/jstimer.c \
 src/jsi2c.c \
+src/jsserial.c \
 src/jsspi.c \
 src/jshardware_common.c \
 $(WRAPPERFILE)
@@ -307,7 +308,8 @@ SOURCES += \
 libs/compression/heatshrink/heatshrink_encoder.c \
 libs/compression/heatshrink/heatshrink_decoder.c \
 libs/compression/compress_heatshrink.c
-
+WRAPPERSOURCES += \
+libs/compression/jswrap_heatshrink.c
 endif
 
 ifndef BOOTLOADER # ------------------------------------------------------------------------------ DON'T USE IN BOOTLOADER
@@ -527,14 +529,6 @@ ifdef USE_TRIGGER
   libs/trigger/trigger.c
 endif
 
-ifdef USE_HASHLIB
-  INCLUDE += -I$(ROOT)/libs/hashlib
-  WRAPPERSOURCES += \
-  libs/hashlib/jswrap_hashlib.c
-  SOURCES += \
-  libs/hashlib/sha2.c
-endif
-
 ifdef USE_WIRINGPI
   DEFINES += -DUSE_WIRINGPI
   LIBS += -lwiringPi
@@ -554,10 +548,20 @@ ifdef USE_CRYPTO
   INCLUDE += -I$(ROOT)/libs/crypto/mbedtls
   INCLUDE += -I$(ROOT)/libs/crypto/mbedtls/include
   WRAPPERSOURCES += libs/crypto/jswrap_crypto.c
-  SOURCES += \
-libs/crypto/mbedtls/library/sha1.c \
-libs/crypto/mbedtls/library/sha256.c \
-libs/crypto/mbedtls/library/sha512.c
+ifdef USE_SHA1_JS
+  DEFINES += -DUSE_SHA1_JS
+  SOURCES += libs/crypto/mbedtls/library/sha512.c
+else
+  SOURCES += libs/crypto/mbedtls/library/sha1.c 
+endif
+ifdef USE_SHA256
+  DEFINES += -DUSE_SHA256
+  SOURCES += libs/crypto/mbedtls/library/sha256.c
+endif
+ifdef USE_SHA512
+  DEFINES += -DUSE_SHA512
+  SOURCES += libs/crypto/mbedtls/library/sha512.c
+endif
 
 ifdef USE_TLS
   USE_AES=1
@@ -656,6 +660,7 @@ CFLAGS += $(OPTIMIZEFLAGS) -c $(ARCHFLAGS) $(DEFINES) $(INCLUDE)
 
 # -Wl,--gc-sections helps remove unused code
 # -Wl,--whole-archive checks for duplicates
+# --specs=nano.specs uses newlib-nano
 ifdef NRF5X
  LDFLAGS += $(OPTIMIZEFLAGS) $(ARCHFLAGS) --specs=nano.specs -lc -lnosys
 else ifdef STM32
@@ -795,6 +800,7 @@ lst: $(PROJ_NAME).lst
 clean:
 	@echo Cleaning targets
 	$(Q)find . -name \*.o | grep -v "./arm-bcm2708\|./gcc-arm-none-eabi" | xargs rm -f
+	$(Q)find . -name \*.d | grep -v "./arm-bcm2708\|./gcc-arm-none-eabi" | xargs rm -f
 	$(Q)rm -f $(ROOT)/gen/*.c $(ROOT)/gen/*.h $(ROOT)/gen/*.ld
 	$(Q)rm -f $(ROOT)/scripts/*.pyc $(ROOT)/boards/*.pyc
 	$(Q)rm -f $(PROJ_NAME).elf

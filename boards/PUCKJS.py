@@ -16,7 +16,7 @@
 import pinutils;
 
 info = {
- 'name' : "PuckJS",
+ 'name' : "Puck.js",
  'link' :  [ "http://www.espruino.com/PuckJS" ],
  'default_console' : "EV_SERIAL1",
  'default_console_tx' : "D28",
@@ -31,10 +31,10 @@ info = {
      'BLUETOOTH',
      'NET',
      'GRAPHICS',
-     'CRYPTO',
+     'CRYPTO','SHA256','SHA512',
+     'AES',
      'NFC',
-     'NEOPIXEL'
-     #'HASHLIB'
+     'NEOPIXEL',
      #'FILESYSTEM'
      #'TLS'
    ],
@@ -42,6 +42,7 @@ info = {
      'DEFINES+=-DHAL_NFC_ENGINEERING_BC_FTPAN_WORKAROUND=1', # Looks like proper production nRF52s had this issue
      'DEFINES+=-DCONFIG_GPIO_AS_PINRESET', # Allow the reset pin to work
      'DEFINES+=-DBLUETOOTH_NAME_PREFIX=\'"Puck.js"\'',
+     'DEFINES+=-DNFC_DEFAULT_URL=\'"https://puck-js.com/go"\'',
      'DFU_PRIVATE_KEY=targets/nrf5x_dfu/dfu_private_key.pem',
      'DFU_SETTINGS=--application-version 0xff --hw-version 52 --sd-req 0x8C',
      'INCLUDE += -I$(ROOT)/libs/puckjs',

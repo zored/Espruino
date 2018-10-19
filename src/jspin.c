@@ -45,8 +45,10 @@ Pin jshGetPinFromString(const char *s) {
       } else if (s[2]>='0' && s[2]<='9') {
         if (!s[3]) {
           pin = ((s[1]-'0')*10 + (s[2]-'0'));
+#ifdef LINUX
         } else if (!s[4] && s[3]>='0' && s[3]<='9') {
           pin = ((s[1]-'0')*100 + (s[2]-'0')*10 + (s[3]-'0'));
+#endif
         }
       }
     }
@@ -177,7 +179,7 @@ void jshGetPinString(char *result, Pin pin) {
 #endif
 #endif
     } else {
-      strncpy(result, "undefined", 10);
+      strcpy(result, "undefined");
     }
   }
 
@@ -333,6 +335,7 @@ void jshPinFunctionToString(JshPinFunction pinFunc, JshPinFunctionToStringFlags 
   JshPinFunction info = JSH_MASK_INFO & pinFunc;
   JshPinFunction firstDevice = 0;
   const char *infoStr = 0;
+  char infoStrBuf[5];
   buf[0]=0;
   if (JSH_PINFUNCTION_IS_USART(pinFunc)) {
     devStr=(flags&JSPFTS_JS_NAMES)?"Serial":"USART";
@@ -359,7 +362,6 @@ void jshPinFunctionToString(JshPinFunction pinFunc, JshPinFunctionToStringFlags 
   } else if (JSH_PINFUNCTION_IS_TIMER(pinFunc)) {
      devStr="TIM";
      firstDevice=JSH_TIMER1;
-     char infoStrBuf[5];
      infoStr = &infoStrBuf[0];
      infoStrBuf[0] = 'C';
      infoStrBuf[1] = 'H';
@@ -377,10 +379,10 @@ void jshPinFunctionToString(JshPinFunction pinFunc, JshPinFunctionToStringFlags 
     jsiConsolePrintf("Couldn't convert pin function %d\n", pinFunc);
     return;
   }
-  if (flags & JSPFTS_DEVICE) strncat(buf, devStr, bufSize);
+  if (flags & JSPFTS_DEVICE) strncat(buf, devStr, bufSize-1);
   if (flags & JSPFTS_DEVICE_NUMBER) itostr(devIdx, &buf[strlen(buf)], 10);
-  if (flags & JSPFTS_SPACE) strncat(buf, " ", bufSize);
-  if (infoStr && (flags & JSPFTS_TYPE)) strncat(buf, infoStr, bufSize);
+  if (flags & JSPFTS_SPACE) strncat(buf, " ", bufSize-(strlen(buf)+1));
+  if (infoStr && (flags & JSPFTS_TYPE)) strncat(buf, infoStr, bufSize-(strlen(buf)+1));
 }
 
 /** Prints a list of capable pins, eg:

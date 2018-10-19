@@ -88,13 +88,13 @@ void jswrap_interface_setSleepIndicator(JsVar *pinVar) {
 /*JSON{
   "type" : "function",
   "name" : "setDeepSleep",
-  "#if" : "defined(EFM32) || defined(STM32)",
+  "#if" : "defined(STM32) || defined(EFM32)",
   "generate" : "jswrap_interface_setDeepSleep",
   "params" : [
     ["sleep","bool",""]
   ]
 }
-Set whether we can enter deep sleep mode, which reduces power consumption to around 100uA. This only works on STM32 Espruino Boards.
+Set whether we can enter deep sleep mode, which reduces power consumption to around 100uA. This only works on STM32 Espruino Boards (nRF52 boards sleep automatically).
 
 Please see http://www.espruino.com/Power+Consumption for more details on this.
  */
@@ -293,7 +293,7 @@ void jswrap_interface_edit(JsVar *funcName) {
          * foo.replaceWith(function() { ... });
          *
          */
-        JsVar *funcData = jsvAsString(func, false);
+        JsVar *funcData = jsvAsString(func);
 
         if (normalDecl) {
           jsvAppendString(newLine, "function ");
@@ -328,7 +328,7 @@ void jswrap_interface_edit(JsVar *funcName) {
     ["echoOn","bool",""]
   ]
 }
-Should TinyJS echo what you type back to you? true = yes (Default), false = no. When echo is off, the result of executing a command is not returned. Instead, you must use 'print' to send output.
+Should Espruino echo what you type back to you? true = yes (Default), false = no. When echo is off, the result of executing a command is not returned. Instead, you must use 'print' to send output.
  */
 void jswrap_interface_echo(bool echoOn) {
   if (echoOn)
@@ -398,7 +398,7 @@ JsVar *jswrap_interface_getSerial() {
   "generate" : "jswrap_interface_setInterval",
   "params" : [
     ["function","JsVar","A Function or String to be executed"],
-    ["timeout","float","The time between calls to the function"],
+    ["timeout","float","The time between calls to the function (max 3153600000000 = 100 years"],
     ["args","JsVarArray","Optional arguments to pass to the function when executed"]
   ],
   "return" : ["JsVar","An ID that can be passed to clearInterval"]
@@ -436,7 +436,7 @@ was returned by `setInterval` into the `clearInterval` function.
   "generate" : "jswrap_interface_setTimeout",
   "params" : [
     ["function","JsVar","A Function or String to be executed"],
-    ["timeout","float","The time until the function will be executed"],
+    ["timeout","float","The time until the function will be executed (max 3153600000000 = 100 years"],
     ["args","JsVarArray","Optional arguments to pass to the function when executed"]
   ],
   "return" : ["JsVar","An ID that can be passed to clearTimeout"]
@@ -470,27 +470,30 @@ was returned by `setTimeout` into the `clearInterval` function.
  */
 JsVar *_jswrap_interface_setTimeoutOrInterval(JsVar *func, JsVarFloat interval, JsVar *args, bool isTimeout) {
   // NOTE: The 5 sec delay mentioned in the description is handled by jshSleep
-  JsVar *itemIndex = 0;
   if (!jsvIsFunction(func) && !jsvIsString(func)) {
     jsExceptionHere(JSET_ERROR, "Function or String not supplied!");
-  } else {
-    // Create a new timer
-    JsVar *timerPtr = jsvNewObject();
-    if (isnan(interval) || interval<TIMER_MIN_INTERVAL) interval=TIMER_MIN_INTERVAL;
-    JsSysTime intervalInt = jshGetTimeFromMilliseconds(interval);
-    jsvObjectSetChildAndUnLock(timerPtr, "time", jsvNewFromLongInteger((jshGetSystemTime() - jsiLastIdleTime) + intervalInt));
-    if (!isTimeout) {
-      jsvObjectSetChildAndUnLock(timerPtr, "interval", jsvNewFromLongInteger(intervalInt));
-    }
-    jsvObjectSetChild(timerPtr, "callback", func); // intentionally no unlock
-    if (jsvGetArrayLength(args))
-      jsvObjectSetChild(timerPtr, "args", args); // intentionally no unlock
-
-    // Add to array
-    itemIndex = jsvNewFromInteger(jsiTimerAdd(timerPtr));
-    jsvUnLock(timerPtr);
-    jsiTimersChanged(); // mark timers as changed
+    return 0;
   }
+  if (isnan(interval) || interval<TIMER_MIN_INTERVAL) interval=TIMER_MIN_INTERVAL;
+  if (interval>TIMER_MAX_INTERVAL) {
+    jsExceptionHere(JSET_ERROR, "Interval is too long (>100 years)");
+    return 0;
+  }
+  // Create a new timer
+  JsVar *timerPtr = jsvNewObject();
+  JsSysTime intervalInt = jshGetTimeFromMilliseconds(interval);
+  jsvObjectSetChildAndUnLock(timerPtr, "time", jsvNewFromLongInteger((jshGetSystemTime() - jsiLastIdleTime) + intervalInt));
+  if (!isTimeout) {
+    jsvObjectSetChildAndUnLock(timerPtr, "interval", jsvNewFromLongInteger(intervalInt));
+  }
+  jsvObjectSetChild(timerPtr, "callback", func); // intentionally no unlock
+  if (jsvGetArrayLength(args))
+    jsvObjectSetChild(timerPtr, "args", args); // intentionally no unlock
+
+  // Add to array
+  JsVar *itemIndex = jsvNewFromInteger(jsiTimerAdd(timerPtr));
+  jsvUnLock(timerPtr);
+  jsiTimersChanged(); // mark timers as changed
   return itemIndex;
 }
 JsVar *jswrap_interface_setInterval(JsVar *func, JsVarFloat timeout, JsVar *args) {
@@ -508,7 +511,7 @@ JsVar *jswrap_interface_setTimeout(JsVar *func, JsVarFloat timeout, JsVar *args)
     ["id","JsVar","The id returned by a previous call to setInterval"]
   ]
 }
-Clear the Interval that was created with setInterval, for example:
+Clear the Interval that was created with `setInterval`, for example:
 
 ```var id = setInterval(function () { print('foo'); }, 1000);```
 
@@ -524,7 +527,7 @@ If no argument is supplied, all timers and intervals are stopped
     ["id","JsVar","The id returned by a previous call to setTimeout"]
   ]
 }
-Clear the Timeout that was created with setTimeout, for example:
+Clear the Timeout that was created with `setTimeout`, for example:
 
 ```var id = setTimeout(function () { print('foo'); }, 1000);```
 
@@ -581,7 +584,7 @@ void jswrap_interface_clearTimeout(JsVar *idVar) {
     ["time","float","The new time period in ms"]
   ]
 }
-Change the Interval on a callback created with setInterval, for example:
+Change the Interval on a callback created with `setInterval`, for example:
 
 ```var id = setInterval(function () { print('foo'); }, 1000); // every second```
 
@@ -597,12 +600,10 @@ void jswrap_interface_changeInterval(JsVar *idVar, JsVarFloat interval) {
   JsVar *timerName = jsvIsBasic(idVar) ? jsvFindChildFromVar(timerArrayPtr, idVar, false) : 0;
   if (timerName) {
     JsVar *timer = jsvSkipNameAndUnLock(timerName);
-    JsVar *v;
-    JsVarInt intervalInt = (JsVarInt)jshGetTimeFromMilliseconds(interval);
-    v = jsvNewFromInteger(intervalInt);
-    jsvUnLock2(jsvSetNamedChild(timer, v, "interval"), v);
-    v = jsvNewFromInteger((JsVarInt)(jshGetSystemTime()-jsiLastIdleTime) + intervalInt);
-    jsvUnLock3(jsvSetNamedChild(timer, v, "time"), v, timer);
+    JsSysTime intervalInt = jshGetTimeFromMilliseconds(interval);
+    jsvObjectSetChildAndUnLock(timer, "interval", jsvNewFromLongInteger(intervalInt));
+    jsvObjectSetChildAndUnLock(timer, "time", jsvNewFromLongInteger((jshGetSystemTime()-jsiLastIdleTime) + intervalInt));
+    jsvUnLock(timer);
     // timerName already unlocked
     jsiTimersChanged(); // mark timers as changed
   } else {

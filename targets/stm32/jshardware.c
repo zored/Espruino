@@ -2004,7 +2004,10 @@ void jshUSARTSetup(IOEventFlags device, JshUSARTInfo *inf) {
   assert(DEVICE_IS_USART(device));
 
   jshSetDeviceInitialised(device, true);
-
+  if (!DEVICE_IS_USART(device)) return;
+#ifdef USB
+  if (device==EV_USBSERIAL) return;
+#endif
   jshSetFlowControlEnabled(device, inf->xOnXOff, inf->pinCTS);
   jshSetErrorHandlingEnabled(device, inf->errorHandling);
 
@@ -3018,4 +3021,9 @@ unsigned int jshSetSystemClock(JsVar *options) {
 #else
   return 0;
 #endif
+}
+
+/// Perform a proper hard-reboot of the device
+void jshReboot() {
+  NVIC_SystemReset();
 }

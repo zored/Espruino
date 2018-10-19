@@ -288,6 +288,7 @@ typedef struct {
   Pin pinMOSI;               //!< Pin to use for Master Out/Slave In.
   unsigned char spiMode;     //!< \see JshSPIFlags
   bool spiMSB;               //!< MSB first?
+  int numBits;               //!< Number of bits per send, default 8
 } PACKED_FLAGS JshSPIInfo;
 
 
@@ -413,6 +414,9 @@ unsigned int jshGetRandomNumber();
  * to match what gets implemented here. The return value is the clock
  * speed in Hz though. */
 unsigned int jshSetSystemClock(JsVar *options);
+
+/// Perform a proper hard-reboot of the device
+void jshReboot();
 
 #if JSH_PORTV_COUNT>0
 /// handler for virtual ports (eg. pins on an IO Expander). This should be defined for each type of board used
