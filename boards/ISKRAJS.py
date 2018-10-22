@@ -35,7 +35,7 @@ info = {
             'GRAPHICS',
             'FILESYSTEM',
             'WIZNET',
-            'CRYPTO',
+            'CRYPTO','SHA1_JS','SHA256','SHA512',
             'NEOPIXEL',
             'TLS'
         ],
