@@ -239,7 +239,7 @@ typedef int64_t JsSysTime;
 #endif
 
 
-#define JSPARSE_MAX_SCOPES  8
+#define JSPARSE_MAX_SCOPES  32
 
 #define STRINGIFY_HELPER(x) #x
 #define STRINGIFY(x) STRINGIFY_HELPER(x)
