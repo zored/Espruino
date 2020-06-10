@@ -1,3 +1,8 @@
+# Branch info
+This is **WIP** merge of two branches:
+- [IskraJS 2v00](https://github.com/amperka/Espruino/tree/iskrajs_2V00)
+- [Espruino 2v05](https://github.com/espruino/Espruino/tree/RELEASE_2V05)
+
 Espruino JavaScript for Microcontrollers
 ========================================
 <pre>
