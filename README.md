@@ -5,15 +5,13 @@ This is **WIP** merge of two branches:
 
 Run this command:
 ```bash
-# Enter image:
+# Enter pre-built image:
 docker run \
   --rm -it \
   --name zored_espruino \
-  -v $PWD/firmware:/firmware \
-  -e IMG_FILE=/firmware/
-  -v $PWD:/espruino \
   zored/espruino:2v05 \
     sh
+## (specify `-v $PWD:/espruino` if you have actual codebase)
 
 # Build firmware:
 ./scripts/create_iskrajs_image.sh
