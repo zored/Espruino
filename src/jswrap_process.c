@@ -17,8 +17,12 @@
 #include "jsparse.h"
 #include "jswrap_process.h"
 #include "jswrap_interactive.h"
+#include "jswrap_espruino.h" // jswrap_espruino_getConsole
 #include "jswrapper.h"
 #include "jsinteractive.h"
+#ifdef PUCKJS
+#include "jswrap_puck.h" // process.env
+#endif
 
 /*JSON{
   "type" : "class",
@@ -30,11 +34,26 @@ This class contains information about Espruino itself
 /*JSON{
   "type" : "event",
   "class" : "process",
-  "name" : "uncaughtException"
+  "name" : "uncaughtException",
+  "params" : [["exception","JsVar","The uncaught exception"]]
 }
 This event is called when an exception gets thrown and isn't caught (eg. it gets all the way back to the event loop).
 
-You can use this for logging potential problems that might occur during execution.
+You can use this for logging potential problems that might occur during execution when you
+might not be able to see what is written to the console, for example:
+
+```
+var lastError;
+process.on('uncaughtException', function(e) {
+  lastError=e;
+  print(e,e.stack?"\n"+e.stack:"")
+});
+
+function checkError() {
+  if (!lastError) return print("No Error");
+  print(lastError,lastError.stack?"\n"+lastError.stack:"")
+}
+```
 
 **Note:** When this is used, exceptions will cease to be reported on the console - which
 may make debugging difficult!
@@ -66,20 +85,13 @@ const void *exportPtrs[] = {
     jsvGetFloat,
     jsvGetInteger,
     jsvGetBool,
-    jspReplaceWith,
+    jsvReplaceWith,
     jspeFunctionCall,
     jspGetNamedVariable,
     jspGetNamedField,
     jspGetVarNamedField,
     0
 };
-const char *exportNames = 
-    "jsvLockAgainSafe\0jsvUnLock\0jsvSkipName\0jsvMathsOp\0"
-    "jsvNewWithFlags\0jsvNewFromFloat\0jsvNewFromInteger\0jsvNewFromString\0jsvNewFromBool\0"
-    "jsvGetFloat\0jsvGetInteger\0jsvGetBool\0"
-    "jspReplaceWith\0jspeFunctionCall\0"
-    "jspGetNamedVariable\0jspGetNamedField\0jspGetVarNamedField\0"
-    "\0\0";
 #endif
 
 /*JSON{
@@ -89,7 +101,9 @@ const char *exportNames =
   "generate" : "jswrap_process_env",
   "return" : ["JsVar","An object"]
 }
-Returns an Object containing various pre-defined variables. standard ones are BOARD, VERSION
+Returns an Object containing various pre-defined variables. standard ones are BOARD, VERSION, FLASH, RAM, MODULES.
+
+For example, to get a list of built-in modules, you can use `process.env.MODULES.split(',')`
  */
 JsVar *jswrap_process_env() {
   JsVar *obj = jsvNewObject();
@@ -99,25 +113,17 @@ JsVar *jswrap_process_env() {
 #endif
   jsvObjectSetChildAndUnLock(obj, "BOARD", jsvNewFromString(PC_BOARD_ID));
   jsvObjectSetChildAndUnLock(obj, "FLASH", jsvNewFromInteger(FLASH_TOTAL));
+#ifdef SPIFLASH_LENGTH
+  jsvObjectSetChildAndUnLock(obj, "SPIFLASH", jsvNewFromInteger(SPIFLASH_LENGTH));
+#endif
+#ifdef PUCKJS
+  jsvObjectSetChildAndUnLock(obj, "HWVERSION", jsvNewFromInteger(isPuckV2?2:1));
+#endif
+  jsvObjectSetChildAndUnLock(obj, "STORAGE", jsvNewFromInteger(FLASH_SAVED_CODE_LENGTH));
   jsvObjectSetChildAndUnLock(obj, "RAM", jsvNewFromInteger(RAM_TOTAL));
   jsvObjectSetChildAndUnLock(obj, "SERIAL", jswrap_interface_getSerial());
-  jsvObjectSetChildAndUnLock(obj, "CONSOLE", jsvNewFromString(jshGetDeviceString(jsiGetConsoleDevice())));
+  jsvObjectSetChildAndUnLock(obj, "CONSOLE", jswrap_espruino_getConsole());
   jsvObjectSetChildAndUnLock(obj, "MODULES", jsvNewFromString(jswGetBuiltInLibraryNames()));
-#if !defined(SAVE_ON_FLASH) && !defined(BLUETOOTH)
-  // It takes too long to send this information over BLE...
-  JsVar *arr = jsvNewObject();
-  if (arr) {
-    const char *s = exportNames;
-    void **p = (void**)exportPtrs;
-    while (*s) {
-      jsvObjectSetChildAndUnLock(arr, s, jsvNewFromInteger((JsVarInt)(size_t)*p));
-      p++;
-      while (*s) s++; // skip until 0
-      s++; // skip over 0
-    }
-    jsvObjectSetChildAndUnLock(obj, "EXPORTS", arr);
-  }  
-#endif
 #ifndef SAVE_ON_FLASH
   // Pointer to a list of predefined exports - eventually we'll get rid of the array above
   jsvObjectSetChildAndUnLock(obj, "EXPTR", jsvNewFromInteger((JsVarInt)(size_t)exportPtrs));
@@ -141,13 +147,14 @@ Run a Garbage Collection pass, and return an object containing information on me
 * `history` : Memory used for command history - that is freed if memory is low. Note that this is INCLUDED in the figure for 'free'
 * `gc`      : Memory freed during the GC pass
 * `gctime`  : Time taken for GC pass (in milliseconds)
+* `blocksize` : Size of a block (variable) in bytes
 * `stackEndAddress` : (on ARM) the address (that can be used with peek/poke/etc) of the END of the stack. The stack grows down, so unless you do a lot of recursion the bytes above this can be used.
 * `flash_start`      : (on ARM) the address of the start of flash memory (usually `0x8000000`)
 * `flash_binary_end` : (on ARM) the address in flash memory of the end of Espruino's firmware.
 * `flash_code_start` : (on ARM) the address in flash memory of pages that store any code that you save with `save()`.
 * `flash_length` : (on ARM) the amount of flash memory this firmware was built for (in bytes). **Note:** Some STM32 chips actually have more memory than is advertised.
 
-Memory units are specified in 'blocks', which are around 16 bytes each (depending on your device). See http://www.espruino.com/Performance for more information.
+Memory units are specified in 'blocks', which are around 16 bytes each (depending on your device). The actual size is available in `blocksize`. See http://www.espruino.com/Performance for more information.
 
 **Note:** To find free areas of flash memory, see `require('Flash').getFree()`
  */
@@ -171,10 +178,11 @@ JsVar *jswrap_process_memory() {
     jsvObjectSetChildAndUnLock(obj, "history", jsvNewFromInteger((JsVarInt)history));
     jsvObjectSetChildAndUnLock(obj, "gc", jsvNewFromInteger((JsVarInt)gc));
     jsvObjectSetChildAndUnLock(obj, "gctime", jsvNewFromFloat(jshGetMillisecondsFromTime(time2-time1)));
+    jsvObjectSetChildAndUnLock(obj, "blocksize", jsvNewFromInteger(sizeof(JsVar)));
 
 #ifdef ARM
-    extern int LINKER_END_VAR; // end of ram used (variables) - should be 'void', but 'int' avoids warnings
-    extern int LINKER_ETEXT_VAR; // end of flash text (binary) section - should be 'void', but 'int' avoids warnings
+    extern uint32_t LINKER_END_VAR; // end of ram used (variables) - should be 'void', but 'int' avoids warnings
+    extern uint32_t LINKER_ETEXT_VAR; // end of flash text (binary) section - should be 'void', but 'int' avoids warnings
     jsvObjectSetChildAndUnLock(obj, "stackEndAddress", jsvNewFromInteger((JsVarInt)(unsigned int)&LINKER_END_VAR));
     jsvObjectSetChildAndUnLock(obj, "flash_start", jsvNewFromInteger((JsVarInt)FLASH_START));
     jsvObjectSetChildAndUnLock(obj, "flash_binary_end", jsvNewFromInteger((JsVarInt)(unsigned int)&LINKER_ETEXT_VAR));

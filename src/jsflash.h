@@ -11,32 +11,31 @@
  * JavaScript Flash IO functions
  * ----------------------------------------------------------------------------
  */
+#ifndef JSFLASH_H_
+#define JSFLASH_H_
+
 #include "jsvar.h"
 
-/// Simple filename used for Flash Storage. We use uint here so we don't have to memcpy/memcmp all the time
-typedef uint64_t JsfFileName;
+/// Simple filename used for Flash Storage. We use firstChars so we can do a quick first pass check for equality
+typedef union {
+  uint32_t firstChars; ///< Set these all to 0 to indicate a replaced/deleted file
+  char c[28]; // whatever is left after 'size'
+} JsfFileName;
 
-#ifdef FLASH_64BITS_ALIGNMENT
-typedef uint64_t JsfWord;
-#define JSF_ALIGNMENT 8
-#define JSF_WORD_UNSET 0xFFFFFFFFFFFFFFFFULL
-#else
-typedef uint32_t JsfWord;
-#define JSF_ALIGNMENT 4
-#define JSF_WORD_UNSET 0xFFFFFFFF
-#endif
+/// Max length of filename in chars
+#define JSF_MAX_FILENAME_LENGTH (sizeof(JsfFileName))
 
 /// Structure for File Storage. It's important this is 8 byte aligned for platforms that only support 64 bit writes
 typedef struct {
-  JsfWord size; ///< Total size
-  JsfWord replacement; ///< pointer to a replacement (eventually). For now this is 0xFFFFFFFF if ok, 0 if erased
+  uint32_t size; ///< Total size (and flags in the top 8 bits)
   JsfFileName name; ///< 0-padded filename
 } JsfFileHeader;
 
 typedef enum {
   JSFF_NONE,
+  JSFF_STORAGEFILE = 64,  // This file is a 'storage file' created by Storage.open
   JSFF_COMPRESSED = 128   // This file contains compressed data
-} JsfFileFlags;
+} JsfFileFlags; // these are stored in the top 8 bits of JsfFileHeader.size
 
 
 // ------------------------------------------------------------------------ Flash Storage Functionality
@@ -44,6 +43,7 @@ typedef enum {
 JsfFileName jsfNameFromString(const char *name);
 /// utility function for creating JsfFileName
 JsfFileName jsfNameFromVar(JsVar *name);
+JsfFileName jsfNameFromVarAndUnLock(JsVar *name);
 /// Return the size in bytes of a file based on the header
 uint32_t jsfGetFileSize(JsfFileHeader *header);
 /// Return the flags for this file based on the header
@@ -51,19 +51,26 @@ JsfFileFlags jsfGetFileFlags(JsfFileHeader *header);
 /// Find a 'file' in the memory store. Return the address of data start (and header if returnedHeader!=0). Returns 0 if not found
 uint32_t jsfFindFile(JsfFileName name, JsfFileHeader *returnedHeader);
 /// Return the contents of a file as a memory mapped var
-JsVar *jsfReadFile(JsfFileName name);
+JsVar *jsfReadFile(JsfFileName name, int offset, int length);
 /// Write a file. For simple stuff just leave offset and size as 0
 bool jsfWriteFile(JsfFileName name, JsVar *data, JsfFileFlags flags, JsVarInt offset, JsVarInt _size);
-/// Erase the given file
-void jsfEraseFile(JsfFileName name);
+/// Erase the given file, return true on success
+bool jsfEraseFile(JsfFileName name);
 /// Erase the entire contents of the memory store
 bool jsfEraseAll();
 /// Try and compact saved data so it'll fit in Flash again
 bool jsfCompact();
-/// Return all files in flash as a JsVar array of names
-JsVar *jsfListFiles();
+/// Return all files in flash as a JsVar array of names. If regex is supplied, it is used to filter the filenames using String.match(regexp)
+JsVar *jsfListFiles(JsVar *regex);
 /// Output debug info for files stored in flash storage
 void jsfDebugFiles();
+/** Return false if the current storage is not valid
+ * or is corrupt somehow. Basically that means if
+ * jsfGet[Next]FileHeader returns false but the header isn't all FF
+ */
+bool jsfIsStorageValid();
+// Get the amount of space free in this page (or all pages). addr=0 uses start page
+uint32_t jsfGetFreeSpace(uint32_t addr, bool allPages);
 
 // ------------------------------------------------------------------------ For loading/saving code to flash
 /// Save contents of JsVars into Flash.
@@ -83,3 +90,5 @@ JsVar *jsfGetBootCodeFromFlash(bool isReset);
 bool jsfFlashContainsCode();
 /** Completely clear any saved code from flash. */
 void jsfRemoveCodeFromFlash();
+
+#endif //JSFLASH_H_

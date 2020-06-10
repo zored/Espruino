@@ -18,7 +18,8 @@ typedef struct {
   Pin pinSCL;
   Pin pinSDA;
   bool started;
-  int delay;
+  int delay; ///< delay per bit
+  int timeout; ///< how long do we wait for clock stretching
 } i2cInfo;
 
 bool jsi2cPopulateI2CInfo(
@@ -33,7 +34,12 @@ bool jsi2cPopulateI2CInfo(
       {"bitrate", JSV_INTEGER, &inf->bitrate}
   };
   if (jsvReadConfigObject(options, configs, sizeof(configs) / sizeof(jsvConfigObject))) {
-    return true;
+    bool ok = true;
+    if (inf->bitrate < 100) {
+      jsExceptionHere(JSET_ERROR, "Invalid I2C bitrate");
+      ok = false;
+    }
+    return ok;
   } else
     return false;
 }
@@ -42,11 +48,8 @@ bool jsi2cPopulateI2CInfo(
 
 // -------------------------------------------------------- I2C Implementation
 
-const int I2C_TIMEOUT = 100000;
-
 static void dly(i2cInfo *inf) {
-  volatile int i;
-  for (i=inf->delay;i>0;i--);
+  if (inf->delay) jshDelayMicroseconds(inf->delay);
 }
 
 static void err(const char *s) {
@@ -59,12 +62,12 @@ static void i2c_start(i2cInfo *inf) {
     jshPinSetValue(inf->pinSDA, 1);
     dly(inf);
     jshPinSetValue(inf->pinSCL, 1);
-    int timeout = I2C_TIMEOUT;
-    while (!jshPinGetValue(inf->pinSCL) && --timeout); // clock stretch
-    if (!timeout) err("Timeout (start)");
+    int timeout = inf->timeout;
+    while (!jshPinGetValue(inf->pinSCL) && timeout) timeout--; // clock stretch
+    if (inf->timeout && !timeout) err("Timeout (start)");
     dly(inf);
   }
-  if (!jshPinGetValue(inf->pinSDA)) err("Arbitration (start)");
+  if (inf->timeout && !jshPinGetValue(inf->pinSDA)) err("Arbitration (start)");
   jshPinSetValue(inf->pinSDA, 0);
   dly(inf);
   jshPinSetValue(inf->pinSCL, 0);
@@ -76,13 +79,13 @@ static void i2c_stop(i2cInfo *inf) {
   jshPinSetValue(inf->pinSDA, 0);
   dly(inf);
   jshPinSetValue(inf->pinSCL, 1);
-  int timeout = I2C_TIMEOUT;
-  while (!jshPinGetValue(inf->pinSCL) && --timeout); // clock stretch
-  if (!timeout) err("Timeout (stop)");
+  int timeout = inf->timeout;
+  while (!jshPinGetValue(inf->pinSCL) && timeout) timeout--; // clock stretch
+  if (inf->timeout && !timeout) err("Timeout (stop)");
   dly(inf);
   jshPinSetValue(inf->pinSDA, 1);
   dly(inf);
-  if (!jshPinGetValue(inf->pinSDA)) err("Arbitration (stop)");
+  if (inf->timeout && !jshPinGetValue(inf->pinSDA)) err("Arbitration (stop)");
   dly(inf);
   inf->started = false;
 }
@@ -92,9 +95,10 @@ static void i2c_wr_bit(i2cInfo *inf, bool b) {
   dly(inf);
   jshPinSetValue(inf->pinSCL, 1); // stop forcing SCL
   dly(inf);
-  int timeout = I2C_TIMEOUT;
-  while (!jshPinGetValue(inf->pinSCL) && --timeout); // clock stretch
-  if (!timeout) err("Timeout (wr)");
+  dly(inf);
+  int timeout = inf->timeout;
+  while (!jshPinGetValue(inf->pinSCL) && timeout) timeout--; // clock stretch
+  if (inf->timeout && !timeout) err("Timeout (wr)");
   jshPinSetValue(inf->pinSCL, 0);
   dly(inf);  
 }
@@ -103,9 +107,10 @@ static bool i2c_rd_bit(i2cInfo *inf) {
   jshPinSetValue(inf->pinSDA, 1); // stop forcing SDA
   dly(inf);
   jshPinSetValue(inf->pinSCL, 1); // stop forcing SCL
-  int timeout = I2C_TIMEOUT;
-  while (!jshPinGetValue(inf->pinSCL) && --timeout); // clock stretch
-  if (!timeout) err("Timeout (rd)");
+  dly(inf);
+  int timeout = inf->timeout;
+  while (!jshPinGetValue(inf->pinSCL) && timeout--); // clock stretch
+  if (inf->timeout && !timeout) err("Timeout (rd)");
   dly(inf);
   bool b = jshPinGetValue(inf->pinSDA);
   jshPinSetValue(inf->pinSCL, 0);
@@ -138,7 +143,9 @@ static void i2c_initstruct(i2cInfo *inf, JshI2CInfo *i) {
   inf->pinSDA = i->pinSDA;
   inf->pinSCL = i->pinSCL;
   inf->started = i->started;
-  inf->delay = 4000000/i->bitrate;
+  inf->delay = 250000/i->bitrate;
+  if (inf->delay<2) inf->delay=0;
+  inf->timeout = i->clockStretch ? 100000 : 0;
 }
 
 // ----------------------------------------------------------------------------

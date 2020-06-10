@@ -25,11 +25,9 @@ void jslCharPosFree(JslCharPos *pos) {
   jsvStringIteratorFree(&pos->it);
 }
 
-JslCharPos jslCharPosClone(JslCharPos *pos) {
-  JslCharPos p;
-  p.it = jsvStringIteratorClone(&pos->it);
-  p.currCh = pos->currCh;
-  return p;
+void jslCharPosClone(JslCharPos *dstpos, JslCharPos *pos) {
+  jsvStringIteratorClone(&dstpos->it, &pos->it);
+  dstpos->currCh = pos->currCh;
 }
 
 /// Return the next character (do not move to the next character)
@@ -45,19 +43,26 @@ static void NO_INLINE jslGetNextCh() {
    * The String iterator we're basing on does, so every
    * time we touch the iterator we have to re-lock it
    */
+  // This is basically just jsvStringIteratorNextInline
+  // but without the locking and unlocking
   lex->it.charIdx++;
   if (lex->it.charIdx >= lex->it.charsInVar) {
     lex->it.charIdx -= lex->it.charsInVar;
+    lex->it.varIndex += lex->it.charsInVar;
+#ifdef SPIFLASH_BASE
+    if (jsvIsFlashString(lex->it.var))
+      return jsvStringIteratorLoadFlashString(&lex->it);
+#endif
     if (lex->it.var && jsvGetLastChild(lex->it.var)) {
       lex->it.var = _jsvGetAddressOf(jsvGetLastChild(lex->it.var));
       lex->it.ptr = &lex->it.var->varData.str[0];
-      lex->it.varIndex += lex->it.charsInVar;
       lex->it.charsInVar = jsvGetCharactersInVar(lex->it.var);
     } else {
       lex->it.var = 0;
       lex->it.ptr = 0;
-      lex->it.varIndex += lex->it.charsInVar;
       lex->it.charsInVar = 0;
+      lex->it.varIndex += lex->it.charIdx;
+      lex->it.charIdx = 0;
     }
   }
 }
@@ -419,6 +424,8 @@ void jslGetNextToken() {
       case 'n': if (jslIsToken("new", 1)) lex->tk = LEX_R_NEW;
       else if (jslIsToken("null", 1)) lex->tk = LEX_R_NULL;
       break;
+      case 'o': if (jslIsToken("of", 1)) lex->tk = LEX_R_OF;
+      break;
       case 'r': if (jslIsToken("return", 1)) lex->tk = LEX_R_RETURN;
       break;
       case 's': if (jslIsToken("static", 1)) lex->tk = LEX_R_STATIC;
@@ -686,7 +693,7 @@ void jslSeekTo(size_t seekToChar) {
 void jslSeekToP(JslCharPos *seekToChar) {
   if (lex->it.var) jsvLockAgain(lex->it.var); // see jslGetNextCh
   jsvStringIteratorFree(&lex->it);
-  lex->it = jsvStringIteratorClone(&seekToChar->it);
+  jsvStringIteratorClone(&lex->it, &seekToChar->it);
   jsvUnLock(lex->it.var); // see jslGetNextCh
   lex->currCh = seekToChar->currCh;
   lex->tokenStart.it.var = 0;
@@ -713,6 +720,7 @@ void jslFunctionCharAsString(unsigned char ch, char *str, size_t len) {
 }
 
 void jslTokenAsString(int token, char *str, size_t len) {
+  assert(len>28); // size of largest string
   // see JS_ERROR_TOKEN_BUF_SIZE
   if (token>32 && token<128) {
     assert(len>=4);
@@ -723,18 +731,19 @@ void jslTokenAsString(int token, char *str, size_t len) {
     return;
   }
 
+
   switch (token) {
-  case LEX_EOF : strncpy(str, "EOF", len); return;
-  case LEX_ID : strncpy(str, "ID", len); return;
-  case LEX_INT : strncpy(str, "INT", len); return;
-  case LEX_FLOAT : strncpy(str, "FLOAT", len); return;
-  case LEX_STR : strncpy(str, "STRING", len); return;
-  case LEX_UNFINISHED_STR : strncpy(str, "UNFINISHED STRING", len); return;
-  case LEX_TEMPLATE_LITERAL : strncpy(str, "TEMPLATE LITERAL", len); return;
-  case LEX_UNFINISHED_TEMPLATE_LITERAL : strncpy(str, "UNFINISHED TEMPLATE LITERAL", len); return;
-  case LEX_REGEX : strncpy(str, "REGEX", len); return;
-  case LEX_UNFINISHED_REGEX : strncpy(str, "UNFINISHED REGEX", len); return;
-  case LEX_UNFINISHED_COMMENT : strncpy(str, "UNFINISHED COMMENT", len); return;
+  case LEX_EOF : strcpy(str, "EOF"); return;
+  case LEX_ID : strcpy(str, "ID"); return;
+  case LEX_INT : strcpy(str, "INT"); return;
+  case LEX_FLOAT : strcpy(str, "FLOAT"); return;
+  case LEX_STR : strcpy(str, "STRING"); return;
+  case LEX_UNFINISHED_STR : strcpy(str, "UNFINISHED STRING"); return;
+  case LEX_TEMPLATE_LITERAL : strcpy(str, "TEMPLATE LITERAL"); return;
+  case LEX_UNFINISHED_TEMPLATE_LITERAL : strcpy(str, "UNFINISHED TEMPLATE LITERAL"); return;
+  case LEX_REGEX : strcpy(str, "REGEX"); return;
+  case LEX_UNFINISHED_REGEX : strcpy(str, "UNFINISHED REGEX"); return;
+  case LEX_UNFINISHED_COMMENT : strcpy(str, "UNFINISHED COMMENT"); return;
   }
   if (token>=_LEX_OPERATOR_START && token<_LEX_R_LIST_END) {
     const char tokenNames[] =
@@ -770,7 +779,7 @@ void jslTokenAsString(int token, char *str, size_t len) {
         /*LEX_R_DO :       */ "do\0"
         /*LEX_R_WHILE :    */ "while\0"
         /*LEX_R_FOR :      */ "for\0"
-        /*LEX_R_BREAK :    */ "return\0"
+        /*LEX_R_BREAK :    */ "break\0"
         /*LEX_R_CONTINUE   */ "continue\0"
         /*LEX_R_FUNCTION   */ "function\0"
         /*LEX_R_RETURN     */ "return\0"
@@ -800,6 +809,7 @@ void jslTokenAsString(int token, char *str, size_t len) {
         /*LEX_R_EXTENDS :  */ "extends\0"
         /*LEX_R_SUPER :  */   "super\0"
         /*LEX_R_STATIC :   */ "static\0"
+        /*LEX_R_OF    :   */  "of\0"
         ;
     unsigned int p = 0;
     int n = token-_LEX_OPERATOR_START;
@@ -809,24 +819,18 @@ void jslTokenAsString(int token, char *str, size_t len) {
       n--; // next token
     }
     assert(n==0);
-    strncpy(str, &tokenNames[p], len);
+    strcpy(str, &tokenNames[p]);
     return;
   }
 
-  assert(len>=10);
-  strncpy(str, "?[",len);
-  itostr(token, &str[2], 10);
-  strncat(str, "]",len);
+  espruino_snprintf(str, len, "?[%d]", token);
 }
 
 void jslGetTokenString(char *str, size_t len) {
   if (lex->tk == LEX_ID) {
-    strncpy(str, "ID:", len);
-    strncat(str, jslGetTokenValueAsString(), len);
+    espruino_snprintf(str, len, "ID:%s", jslGetTokenValueAsString());
   } else if (lex->tk == LEX_STR) {
-    strncpy(str, "String:'", len);
-    strncat(str, jslGetTokenValueAsString(), len);
-    strncat(str, "'", len);
+    espruino_snprintf(str, len, "String:'%s'", jslGetTokenValueAsString());
   } else
     jslTokenAsString(lex->tk, str, len);
 }
@@ -856,20 +860,25 @@ bool jslIsIDOrReservedWord() {
          (lex->tk >= _LEX_R_LIST_START && lex->tk <= _LEX_R_LIST_END);
 }
 
+/* Match failed - report error message */
+static void jslMatchError(int expected_tk) {
+  char gotStr[30];
+  char expStr[30];
+  jslGetTokenString(gotStr, sizeof(gotStr));
+  jslTokenAsString(expected_tk, expStr, sizeof(expStr));
+
+  size_t oldPos = lex->tokenLastStart;
+  lex->tokenLastStart = jsvStringIteratorGetIndex(&lex->tokenStart.it)-1;
+  jsExceptionHere(JSET_SYNTAXERROR, "Got %s expected %s", gotStr, expStr);
+  lex->tokenLastStart = oldPos;
+  // Sod it, skip this token anyway - stops us looping
+  jslGetNextToken();
+}
+
 /// Match, and return true on success, false on failure
 bool jslMatch(int expected_tk) {
   if (lex->tk != expected_tk) {
-    char gotStr[20];
-    char expStr[20];
-    jslGetTokenString(gotStr, sizeof(gotStr));
-    jslTokenAsString(expected_tk, expStr, sizeof(expStr));
-
-    size_t oldPos = lex->tokenLastStart;
-    lex->tokenLastStart = jsvStringIteratorGetIndex(&lex->tokenStart.it)-1;
-    jsExceptionHere(JSET_SYNTAXERROR, "Got %s expected %s", gotStr, expStr);
-    lex->tokenLastStart = oldPos;
-    // Sod it, skip this token anyway - stops us looping
-    jslGetNextToken();
+    jslMatchError(expected_tk);
     return false;
   }
   jslGetNextToken();
@@ -890,18 +899,17 @@ JsVar *jslNewTokenisedStringFromLexer(JslCharPos *charFrom, size_t charTo) {
   while (lex->tk!=LEX_EOF && jsvStringIteratorGetIndex(&lex->it)<=charTo+1) {
     if ((lex->tk==LEX_ID || lex->tk==LEX_FLOAT || lex->tk==LEX_INT) &&
         ( lastTk==LEX_ID ||  lastTk==LEX_FLOAT ||  lastTk==LEX_INT)) {
-      jsExceptionHere(JSET_SYNTAXERROR, "ID/number following ID/number isn't valid JS");
-      length = 0;
-      break;
+      length++; // we need to insert a space
     }
     if (lex->tk==LEX_ID ||
         lex->tk==LEX_INT ||
         lex->tk==LEX_FLOAT ||
         lex->tk==LEX_STR ||
-        lex->tk==LEX_TEMPLATE_LITERAL) {
+        lex->tk==LEX_TEMPLATE_LITERAL ||
+        lex->tk==LEX_REGEX) {
       length += jsvStringIteratorGetIndex(&lex->it)-jsvStringIteratorGetIndex(&lex->tokenStart.it);
     } else {
-      length++;
+      length++; // for single token
     }
     lastTk = lex->tk;
     jslGetNextToken();
@@ -914,20 +922,28 @@ JsVar *jslNewTokenisedStringFromLexer(JslCharPos *charFrom, size_t charTo) {
     jsvStringIteratorNew(&dstit, var, 0);
     // now start appending
     jslSeekToP(charFrom);
+    lastTk = LEX_EOF;
     while (lex->tk!=LEX_EOF && jsvStringIteratorGetIndex(&lex->it)<=charTo+1) {
+      if ((lex->tk==LEX_ID || lex->tk==LEX_FLOAT || lex->tk==LEX_INT) &&
+          ( lastTk==LEX_ID ||  lastTk==LEX_FLOAT ||  lastTk==LEX_INT)) {
+        jsvStringIteratorSetCharAndNext(&dstit, ' ');
+      }
       if (lex->tk==LEX_ID ||
           lex->tk==LEX_INT ||
           lex->tk==LEX_FLOAT ||
           lex->tk==LEX_STR ||
-          lex->tk==LEX_TEMPLATE_LITERAL) {
+          lex->tk==LEX_TEMPLATE_LITERAL ||
+          lex->tk==LEX_REGEX) {
+        // copy in string verbatim
         jsvStringIteratorSetCharAndNext(&dstit, lex->tokenStart.currCh);
-        JsvStringIterator it = jsvStringIteratorClone(&lex->tokenStart.it);
+        JsvStringIterator it;
+        jsvStringIteratorClone(&it, &lex->tokenStart.it);
         while (jsvStringIteratorGetIndex(&it)+1 < jsvStringIteratorGetIndex(&lex->it)) {
           jsvStringIteratorSetCharAndNext(&dstit, jsvStringIteratorGetChar(&it));
           jsvStringIteratorNext(&it);
         }
         jsvStringIteratorFree(&it);
-      } else {
+      } else { // single char for the token
         jsvStringIteratorSetCharAndNext(&dstit, (char)lex->tk);
       }
       lastTk = lex->tk;
@@ -954,7 +970,8 @@ JsVar *jslNewStringFromLexer(JslCharPos *charFrom, size_t charTo) {
       // Flat string
       char *flatPtr = jsvGetFlatStringPointer(var);
       *(flatPtr++) = charFrom->currCh;
-      JsvStringIterator it = jsvStringIteratorClone(&charFrom->it);
+      JsvStringIterator it;
+      jsvStringIteratorClone(&it, &charFrom->it);
       while (jsvStringIteratorHasChar(&it) && (--maxLength>0)) {
         *(flatPtr++) = jsvStringIteratorGetChar(&it);
         jsvStringIteratorNext(&it);
@@ -976,7 +993,8 @@ JsVar *jslNewStringFromLexer(JslCharPos *charFrom, size_t charTo) {
 
   size_t l = maxLength;
   // now start appending
-  JsvStringIterator it = jsvStringIteratorClone(&charFrom->it);
+  JsvStringIterator it;
+  jsvStringIteratorClone(&it, &charFrom->it);
   while (jsvStringIteratorHasChar(&it) && (--maxLength>0)) {
     char ch = jsvStringIteratorGetChar(&it);
     if (blockChars >= jsvGetMaxCharactersInVar(block)) {

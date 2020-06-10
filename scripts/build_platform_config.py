@@ -48,6 +48,7 @@ pins = board.get_pins()
 # -----------------------------------------------------------------------------------------
 
 LINUX = board.chip["family"]=="LINUX"
+EMSCRIPTEN = board.chip["family"]=="EMSCRIPTEN"
 
 if not "default_console" in board.info:
   board.info["default_console"] = "EV_SERIAL1"
@@ -73,7 +74,7 @@ print("VarCache size = "+str(var_cache_size))
 flash_page_size = 1024
 
 if LINUX:
-  flash_saved_code_pages = 8
+  flash_saved_code_pages = board.chip['flash']*1024 / flash_page_size
   total_flash = flash_page_size*flash_saved_code_pages  
 else: # NOT LINUX
   # 100xB and 103xB are mid-density, so have 1k page sizes
@@ -140,10 +141,17 @@ def codeOutDevice(device):
         codeOut("#define "+device+"_PINSTATE JSHPINSTATE_GPIO_"+board.devices[device]["pinstate"]);
     if device[0:3]=="LED":
       codeOut("#define "+device+"_ONSTATE "+("0" if "inverted" in board.devices[device] else "1"))
+    if "no_bootloader" in board.devices[device]:
+      codeOut("#define "+device+"_NO_BOOTLOADER 1 // don't use this in the bootloader");
 
 def codeOutDevicePin(device, pin, definition_name):
   if device in board.devices:
     codeOut("#define "+definition_name+" "+toPinDef(board.devices[device][pin]))
+
+def codeOutDevicePins(device, definition_name):
+  for entry in board.devices[device]:
+    if entry.startswith("pin_") or entry=="pin":
+      codeOut("#define "+definition_name+"_"+entry.upper()+" "+toPinDef(board.devices[device][entry]))
 # -----------------------------------------------------------------------------------------
 
 
@@ -173,6 +181,8 @@ exti_count = 16
 
 if board.chip["family"]=="LINUX":
   board.chip["class"]="LINUX"
+elif board.chip["family"]=="EMSCRIPTEN":
+  board.chip["class"]="EMSCRIPTEN"
 elif board.chip["family"]=="STM32F1":
   board.chip["class"]="STM32"
   codeOut('#include "stm32f10x.h"')
@@ -316,9 +326,20 @@ if LINUX:
   bufferSizeIO = 256
   bufferSizeTX = 256
   bufferSizeTimer = 16
+elif EMSCRIPTEN:
+  bufferSizeIO = 256
+  bufferSizeTX = 256
+  bufferSizeTimer = 16
 else:
-  bufferSizeIO = 64 if board.chip["ram"]<20 else 128
-  bufferSizeTX = 32 if board.chip["ram"]<20 else 128
+  # IO buffer - for received chars, setWatch, etc
+  bufferSizeIO = 64
+  if board.chip["ram"]>=20: bufferSizeIO = 128
+  if board.chip["ram"]>=96: bufferSizeIO = 256
+  # NRF52 needs this as Bluetooth traffic is funnelled through the buffer
+  if board.chip["family"]=="NRF52": bufferSizeIO = 256
+  # TX buffer - for print/write/etc
+  bufferSizeTX = 32 
+  if board.chip["ram"]>=20: bufferSizeTX = 128
   bufferSizeTimer = 4 if board.chip["ram"]<20 else 16
 
 if 'util_timer_tasks' in board.info:
@@ -347,6 +368,15 @@ if "USB" in board.devices:
   if "pin_vsense" in board.devices["USB"]: codeOutDevicePin("USB", "pin_vsense", "USB_VSENSE_PIN")
 
 if "LCD" in board.devices:
+  codeOut("#define LCD_CONTROLLER_"+board.devices["LCD"]["controller"].upper())
+  if "width" in board.devices["LCD"]:
+    codeOut("#define LCD_WIDTH "+str(board.devices["LCD"]["width"]))
+  if "height" in board.devices["LCD"]:
+    codeOut("#define LCD_HEIGHT "+str(board.devices["LCD"]["height"]))
+  if "bpp" in board.devices["LCD"]:
+    codeOut("#define LCD_BPP "+str(board.devices["LCD"]["bpp"]))
+  if "pin_bl" in board.devices["LCD"]:
+    codeOutDevicePin("LCD", "pin_bl", "LCD_BL")
   if board.devices["LCD"]["controller"]=="fsmc":
     for i in range(0,16):
       codeOutDevicePin("LCD", "pin_d"+str(i), "LCD_FSMC_D"+str(i))
@@ -357,14 +387,16 @@ if "LCD" in board.devices:
       codeOutDevicePin("LCD", "pin_rs", "LCD_FSMC_RS")
     if "pin_reset" in board.devices["LCD"]:
       codeOutDevicePin("LCD", "pin_reset", "LCD_RESET")
-    if "pin_bl" in board.devices["LCD"]:
-      codeOutDevicePin("LCD", "pin_bl", "LCD_BL")
-  if board.devices["LCD"]["controller"]=="ssd1306" or board.devices["LCD"]["controller"]=="st7567":
+  if board.devices["LCD"]["controller"]=="ssd1306" or board.devices["LCD"]["controller"]=="st7567" or board.devices["LCD"]["controller"]=="st7789v" or board.devices["LCD"]["controller"]=="st7735":
     codeOutDevicePin("LCD", "pin_mosi", "LCD_SPI_MOSI")
     codeOutDevicePin("LCD", "pin_sck", "LCD_SPI_SCK")
     codeOutDevicePin("LCD", "pin_cs", "LCD_SPI_CS")
     codeOutDevicePin("LCD", "pin_dc", "LCD_SPI_DC")
     codeOutDevicePin("LCD", "pin_rst", "LCD_SPI_RST")
+  if "pin_bl" in board.devices["LCD"]:
+    codeOutDevicePin("LCD", "pin_bl", "LCD_BL")
+  if board.devices["LCD"]["controller"]=="st7789_8bit":
+    codeOutDevicePins("LCD","LCD");
 
 if "SD" in board.devices:
   if not "pin_d3" in board.devices["SD"]: # NOT SDIO - normal SD
@@ -388,6 +420,50 @@ if "CAPSENSE" in board.devices:
   codeOutDevicePin("CAPSENSE", "pin_rx", "CAPSENSE_RX_PIN")
   codeOutDevicePin("CAPSENSE", "pin_tx", "CAPSENSE_TX_PIN")
 
+if "VIBRATE" in board.devices:
+  codeOutDevicePins("VIBRATE", "VIBRATE")
+
+if "SPEAKER" in board.devices:
+  codeOutDevicePins("SPEAKER", "SPEAKER")
+
+if "HEARTRATE" in board.devices:
+  codeOutDevicePins("HEARTRATE", "HEARTRATE")
+
+if "BAT" in board.devices:
+  codeOutDevicePins("BAT", "BAT")
+
+if "GPS" in board.devices:
+  if "pin_en" in board.devices["GPS"]: codeOutDevicePin("GPS", "pin_en", "GPS_PIN_EN")
+  codeOutDevicePins("GPS", "GPS")
+
+if "ACCEL" in board.devices:
+  codeOut("#define ACCEL_DEVICE \""+board.devices["ACCEL"]["device"].upper()+"\"")
+  codeOut("#define ACCEL_ADDR "+str(board.devices["ACCEL"]["addr"]))
+  codeOutDevicePins("ACCEL", "ACCEL")
+
+if "MAG" in board.devices:
+  codeOut("#define MAG_DEVICE \""+board.devices["MAG"]["device"].upper()+"\"")
+  if "addr" in board.devices["MAG"]:
+    codeOut("#define MAG_ADDR "+str(board.devices["MAG"]["addr"]))
+  codeOutDevicePins("MAG", "MAG")
+
+if "TEMP" in board.devices:
+  if "addr" in board.devices["TEMP"]:
+    codeOut("#define TEMP_ADDR "+str(board.devices["TEMP"]["addr"]))
+  codeOutDevicePins("TEMP", "TEMP")
+
+if "PRESSURE" in board.devices:
+  codeOut("#define PRESSURE_DEVICE \""+board.devices["PRESSURE"]["device"].upper()+"\"")
+  codeOut("#define PRESSURE_ADDR "+str(board.devices["PRESSURE"]["addr"]))
+  codeOutDevicePins("PRESSURE", "PRESSURE")
+
+if "SPIFLASH" in board.devices:
+  codeOut("#define SPIFLASH_BASE 0x40000000UL")
+  codeOut("#define SPIFLASH_PAGESIZE 4096")
+  codeOut("#define SPIFLASH_LENGTH "+str(board.devices["SPIFLASH"]["size"]))
+  codeOutDevicePins("SPIFLASH", "SPIFLASH")
+
+#for device in ["USB","SD","LCD","JTAG","ESP8266","IR","GPS","ACCEL","MAG","TEMP","PRESSURE","SPIFLASH"]:
 for device in ["USB","SD","LCD","JTAG","ESP8266","IR"]:
   if device in board.devices:
     for entry in board.devices[device]:

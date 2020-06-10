@@ -667,6 +667,7 @@ void jshUSARTSetup(IOEventFlags device, JshUSARTInfo *inf){
   assert(DEVICE_IS_USART(device));
 
   jshSetDeviceInitialised(device, true);
+  if (!DEVICE_IS_USART(device)) return;
 
   jshSetFlowControlEnabled(device, inf->xOnXOff, inf->pinCTS);
   jshSetErrorHandlingEnabled(device, inf->errorHandling);
@@ -2176,4 +2177,9 @@ unsigned int jshGetRandomNumber(){
  * speed in Hz though. */
 unsigned int jshSetSystemClock(JsVar *options){
         return 0;
+}
+
+/// Perform a proper hard-reboot of the device
+void jshReboot() {
+  NVIC_SystemReset();
 }
