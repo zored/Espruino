@@ -14,6 +14,7 @@
  * ----------------------------------------------------------------------------
  */
 #include "jswrap_array.h"
+#include "jswrap_functions.h" // jswrap_isNaN
 #include "jsparse.h"
 
 #define min(a,b) (((a)<(b))?(a):(b))
@@ -108,6 +109,47 @@ JsVar *jswrap_array_indexOf(JsVar *parent, JsVar *value, JsVarInt startIdx) {
   // but this is the name - we must turn it into a var
   if (idxName == 0) return jsvNewFromInteger(-1); // not found!
   return jsvNewFromInteger(jsvGetIntegerAndUnLock(idxName));
+}
+
+/*JSON{
+  "type" : "method",
+  "class" : "Array",
+  "name" : "includes",
+  "ifndef" : "SAVE_ON_FLASH",
+  "generate" : "jswrap_array_includes",
+  "params" : [
+    ["value","JsVar","The value to check for"],
+    ["startIndex","int","(optional) the index to search from, or 0 if not specified"]
+  ],
+  "return" : ["bool","`true` if the array includes the value, `false` otherwise"]
+}
+Return `true` if the array includes the value, `false` otherwise
+ */
+bool jswrap_array_includes(JsVar *arr, JsVar *value, JsVarInt startIdx) {
+  if (startIdx<0) startIdx+=jsvGetLength(arr);
+  if (startIdx<0) startIdx=0;
+  bool isNaN = jsvIsFloat(value) && isnan(jsvGetFloat(value));
+  if (!jsvIsIterable(arr)) return 0;
+  JsvIterator it;
+  jsvIteratorNew(&it, arr, JSIF_DEFINED_ARRAY_ElEMENTS);
+  while (jsvIteratorHasElement(&it)) {
+    JsVar *childIndex = jsvIteratorGetKey(&it);
+    if (jsvIsInt(childIndex) && jsvGetInteger(childIndex)>=startIdx) {
+      JsVar *childValue = jsvIteratorGetValue(&it);
+      if (childValue==value ||
+          jsvMathsOpTypeEqual(childValue, value) ||
+          (isNaN && jsvIsFloat(childValue) && isnan(jsvGetFloat(childValue)))) {
+        jsvUnLock2(childIndex,childValue);
+        jsvIteratorFree(&it);
+        return true;
+      }
+      jsvUnLock(childValue);
+    }
+    jsvUnLock(childIndex);
+    jsvIteratorNext(&it);
+  }
+  jsvIteratorFree(&it);
+  return false;
 }
 
 /*JSON{
@@ -682,7 +724,9 @@ Returns true if the provided object is an array
 NO_INLINE static JsVarInt _jswrap_array_sort_compare(JsVar *a, JsVar *b, JsVar *compareFn) {
   if (compareFn) {
     JsVar *args[2] = {a,b};
-    return jsvGetIntegerAndUnLock(jspeFunctionCall(compareFn, 0, 0, false, 2, args));
+    JsVarFloat f = jsvGetFloatAndUnLock(jspeFunctionCall(compareFn, 0, 0, false, 2, args));
+    if (f==0) return 0;
+    return (f<0)?-1:1;
   } else {
     JsVar *sa = jsvAsString(a);
     JsVar *sb = jsvAsString(b);
@@ -695,7 +739,8 @@ NO_INLINE static JsVarInt _jswrap_array_sort_compare(JsVar *a, JsVar *b, JsVar *
 NO_INLINE static void _jswrap_array_sort(JsvIterator *head, int n, JsVar *compareFn) {
   if (n < 2) return; // sort done!
 
-  JsvIterator pivot = jsvIteratorClone(head);
+  JsvIterator pivot;
+  jsvIteratorClone(&pivot, head);
   bool pivotLowest = true; // is the pivot the lowest value in here?
   JsVar *pivotValue = jsvIteratorGetValue(&pivot);
   /* We're just going to use the first entry (head) as the pivot...
@@ -703,7 +748,8 @@ NO_INLINE static void _jswrap_array_sort(JsvIterator *head, int n, JsVar *compar
    * swap the values over (hence moving pivot forwards)  */
 
   int nlo = 0, nhigh = 0;
-  JsvIterator it = jsvIteratorClone(head); //
+  JsvIterator it;
+  jsvIteratorClone(&it, head); //
   jsvIteratorNext(&it);
 
 
@@ -890,8 +936,9 @@ JsVar *jswrap_array_fill(JsVar *parent, JsVar *value, JsVarInt start, JsVar *end
 void _jswrap_array_reverse_block(JsVar *parent, JsvIterator *it, int items) {
   assert(items > 1);
 
-  JsvIterator ita = jsvIteratorClone(it);
-  JsvIterator itb = jsvIteratorClone(it);
+  JsvIterator ita, itb;
+  jsvIteratorClone(&ita, it);
+  jsvIteratorClone(&itb, it);
 
   // move second pointer halfway through (round up)
   int i;

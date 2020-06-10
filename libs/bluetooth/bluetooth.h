@@ -39,6 +39,8 @@ typedef struct {
 #define BLE_GATT_HANDLE_INVALID (0)
 #define BLE_GAP_ADDR_TYPE_PUBLIC (0)
 #define BLE_GAP_ADDR_TYPE_RANDOM_STATIC (1)
+#define BLE_GAP_ADDR_TYPE_RANDOM_PRIVATE_RESOLVABLE (2)
+#define BLE_GAP_ADDR_TYPE_RANDOM_PRIVATE_NON_RESOLVABLE (3)
 #define BLE_GAP_ADV_MAX_SIZE (31)
 #define BLE_GAP_AD_TYPE_16BIT_SERVICE_UUID_MORE_AVAILABLE   0x02
 #define BLE_GAP_AD_TYPE_16BIT_SERVICE_UUID_COMPLETE         0x03
@@ -91,18 +93,23 @@ typedef enum  {
   BLE_IS_SLEEPING = 512,      //< NRF.sleep has been called
   BLE_PM_INITIALISED = 1024,  //< Set when the Peer Manager has been initialised (only needs doing once, even after SD restart)
   BLE_IS_NOT_CONNECTABLE = 2048, //< Is the device connectable?
-  BLE_WHITELIST_ON_BOND = 4096,  //< Should we write to the whitelist whenever we bond to a device?
+  BLE_IS_NOT_SCANNABLE = 4096, //< Is the device scannable? eg, scan response
+  BLE_WHITELIST_ON_BOND = 8192,  //< Should we write to the whitelist whenever we bond to a device?
 
-  BLE_DISABLE_DYNAMIC_INTERVAL = 8192, //< Disable automatically changing interval based on BLE peripheral activity
+  BLE_DISABLE_DYNAMIC_INTERVAL = 16384, //< Disable automatically changing interval based on BLE peripheral activity
 
-  BLE_IS_ADVERTISING_MULTIPLE = 16384, // We have multiple different advertising packets
-  BLE_ADVERTISING_MULTIPLE_ONE = 32768,
-  BLE_ADVERTISING_MULTIPLE_SHIFT = GET_BIT_NUMBER(BLE_ADVERTISING_MULTIPLE_ONE),
+  BLE_IS_ADVERTISING_MULTIPLE = 32768, // We have multiple different advertising packets
+  BLE_ADVERTISING_MULTIPLE_ONE = 65536,
+  BLE_ADVERTISING_MULTIPLE_SHIFT = 16,//GET_BIT_NUMBER(BLE_ADVERTISING_MULTIPLE_ONE),
   BLE_ADVERTISING_MULTIPLE_MASK = 255 << BLE_ADVERTISING_MULTIPLE_SHIFT,
+
+  /// These are flags that should be reset when the softdevice starts up
+  BLE_RESET_ON_SOFTDEVICE_START = BLE_IS_SENDING|BLE_IS_SCANNING|BLE_IS_ADVERTISING
 } BLEStatus;
 
 typedef enum {
   BLEP_NONE,
+  BLEP_ERROR,                       //< Softdevice threw some error (code in data)
   BLEP_CONNECTED,                   //< Peripheral connected (address as buffer)
   BLEP_DISCONNECTED,                //< Peripheral disconnected
   BLEP_RSSI_PERIPH,                 //< RSSI data from peripheral connection (rssi as data)
@@ -128,6 +135,9 @@ typedef enum {
   BLEP_HID_VALUE,                   //< A HID value was received (eg caps lock)
   BLEP_WRITE,                       //< One of our characteristics written by someone else
   BLEP_NOTIFICATION,                //< A characteristic we were watching has changes
+  BLEP_TASK_PASSKEY_DISPLAY,        //< We're pairing and have been provided with a passkey to display
+  BLEP_TASK_AUTH_KEY_REQUEST,       //< We're pairing and the device wants a passkey from us
+  BLEP_TASK_AUTH_STATUS             //< Data on how authentication was going has been received
 } BLEPending;
 
 
@@ -153,9 +163,9 @@ int jsble_exec_pending(IOEvent *event);
  * both user-defined as well as UART/HID */
 void jsble_restart_softdevice();
 
-void jsble_advertising_start();
+uint32_t jsble_advertising_start();
+uint32_t jsble_advertising_update_advdata(char *dPtr, unsigned int dLen);
 void jsble_advertising_stop();
-
 
 /** Is BLE connected to any device at all? */
 bool jsble_has_connection();
@@ -177,7 +187,7 @@ bool jsble_check_error(uint32_t err_code);
 uint32_t jsble_set_periph_connection_interval(JsVarFloat min, JsVarFloat max);
 
 /// Scanning for advertising packets
-uint32_t jsble_set_scanning(bool enabled);
+uint32_t jsble_set_scanning(bool enabled, bool activeScan);
 
 /// returning RSSI values for current connection
 uint32_t jsble_set_rssi_scan(bool enabled);
@@ -192,6 +202,12 @@ uint32_t jsble_disconnect(uint16_t conn_handle);
 
 /// For BLE HID, send an input report to the receiver. Must be <= HID_KEYS_MAX_LEN
 void jsble_send_hid_input_report(uint8_t *data, int length);
+
+/// Update the current security settings from the info in hiddenRoot.BLE_NAME_SECURITY
+void jsble_update_security();
+
+/// Return an object showing the security status of the given connection
+JsVar *jsble_get_security_status(uint16_t conn_handle);
 
 // ------------------------------------------------- lower-level utility fns
 
@@ -259,8 +275,10 @@ void jsble_central_startBonding(bool forceRePair);
 JsVar *jsble_central_getSecurityStatus();
 /// RSSI monitoring in central mode
 uint32_t jsble_set_central_rssi_scan(bool enabled);
-// Set whether or not the whitelist is enabled
+/// Set whether or not the whitelist is enabled
 void jsble_central_setWhitelist(bool whitelist);
+/// Send a passkey if one was requested (passkey = 6 bytes long)
+uint32_t jsble_central_send_passkey(char *passkey);
 #endif
 
 #endif // BLUETOOTH_H

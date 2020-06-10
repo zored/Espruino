@@ -187,7 +187,7 @@ built-in wifi only).
   "type" : "method",
   "class" : "Serial",
   "name" : "setConsole",
-  "generate_full" : "jsiSetConsoleDevice(jsiGetDeviceFromClass(parent), force)",
+  "generate" : "jswrap_serial_setConsole",
   "params" : [
     ["force","bool","Whether to force the console to this port"]
   ]
@@ -196,7 +196,17 @@ Set this Serial port as the port for the JavaScript console (REPL).
 
 Unless `force` is set to true, changes in the connection state of the board
 (for instance plugging in USB) will cause the console to change.
+
+See `E.setConsole` for a more flexible version of this function.
  */
+void jswrap_serial_setConsole(JsVar *parent, bool force) {
+  IOEventFlags device = jsiGetDeviceFromClass(parent);
+  if (DEVICE_IS_SERIAL(device)) {
+    jsiSetConsoleDevice(device, force);
+  } else {
+    jsExceptionHere(JSET_ERROR, "setConsole can't be used on 'soft' devices");
+  }
+}
 
 /*JSON{
   "type" : "method",
@@ -209,6 +219,14 @@ Unless `force` is set to true, changes in the connection state of the board
   ]
 }
 Setup this Serial port with the given baud rate and options.
+
+eg.
+
+```
+Serial1.setup(9600,{rx:a_pin, tx:a_pin});
+```
+
+The second argument can contain:
 
 ```
 {
@@ -251,6 +269,15 @@ you'll need to use `errors:true` when initialising serial.
 
 On Linux builds there is no default Serial device, so you must specify
 a path to a device - for instance: `Serial1.setup(9600,{path:"/dev/ttyACM0"})`
+
+You can also set up 'software serial' using code like:
+
+```
+var s = new Serial();
+s.setup(9600,{rx:a_pin, tx:a_pin});
+```
+
+However software serial doesn't use `ck`, `cts`, `parity`, `flow` or `errors` parts of the initialisation object.
 */
 void jswrap_serial_setup(JsVar *parent, JsVar *baud, JsVar *options) {
   IOEventFlags device = jsiGetDeviceFromClass(parent);
@@ -338,10 +365,10 @@ void jswrap_serial_unsetup(JsVar *parent) {
     jshSetFlowControlEnabled(device, false, PIN_UNDEFINED);
   }
   // Reset pin states. On hardware this should disable the UART anyway
-  if (inf.pinCK!=PIN_UNDEFINED) jshPinSetState(inf.pinCK, JSHPINSTATE_GPIO_IN);
-  if (inf.pinCTS!=PIN_UNDEFINED) jshPinSetState(inf.pinCTS, JSHPINSTATE_GPIO_IN);
-  if (inf.pinRX!=PIN_UNDEFINED) jshPinSetState(inf.pinRX, JSHPINSTATE_GPIO_IN);
-  if (inf.pinTX!=PIN_UNDEFINED) jshPinSetState(inf.pinTX, JSHPINSTATE_GPIO_IN);
+  if (inf.pinCK!=PIN_UNDEFINED) jshPinSetState(inf.pinCK, JSHPINSTATE_UNDEFINED);
+  if (inf.pinCTS!=PIN_UNDEFINED) jshPinSetState(inf.pinCTS, JSHPINSTATE_UNDEFINED);
+  if (inf.pinRX!=PIN_UNDEFINED) jshPinSetState(inf.pinRX, JSHPINSTATE_UNDEFINED);
+  if (inf.pinTX!=PIN_UNDEFINED) jshPinSetState(inf.pinTX, JSHPINSTATE_UNDEFINED);
 }
 #endif
 
@@ -411,7 +438,7 @@ void jswrap_serial_println(JsVar *parent,  JsVar *str) {
   "name" : "write",
   "generate" : "jswrap_serial_write",
   "params" : [
-    ["data","JsVarArray","One or more items to write. May be ints, strings, arrays, or objects of the form `{data: ..., count:#}`."]
+    ["data","JsVarArray","One or more items to write. May be ints, strings, arrays, or special objects (see `E.toUint8Array` for more info)."]
   ]
 }
 Write a character or array of data to the serial port
@@ -429,7 +456,7 @@ void jswrap_serial_write(JsVar *parent, JsVar *args) {
   "name" : "inject",
   "generate" : "jswrap_serial_inject",
   "params" : [
-    ["data","JsVarArray","One or more items to write. May be ints, strings, arrays, or objects of the form `{data: ..., count:#}`."]
+    ["data","JsVarArray","One or more items to write. May be ints, strings, arrays, or special objects (see `E.toUint8Array` for more info)."]
   ]
 }
 Add data to this device as if it came directly from the input - it will be

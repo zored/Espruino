@@ -209,11 +209,35 @@ int jswrap_string_indexOf(JsVar *parent, JsVar *substring, JsVar *fromIndex, boo
   "name" : "match",
   "generate" : "jswrap_string_match",
   "params" : [
-    ["subStr","JsVar","Substring or RegExp to match"]
+    ["substr","JsVar","Substring or RegExp to match"]
   ],
-  "return" : ["JsVar","This match array"]
+  "return" : ["JsVar","A match array or `null` (see below):"]
 }
-Matches `subStr` occurrence in the string.
+Matches an occurrence `subStr` in the string.
+
+Returns `null` if no match, or:
+
+```
+"abcdef".match("b") == [
+  "b",         // array index 0 - the matched string
+  index: 1,    // the start index of the match
+  input: "b"   // the input string
+ ]
+
+"abcdefabcdef".match(/bcd/) == [
+  "bcd", index: 1,
+  input: "abcdefabcdef"
+ ]
+```
+
+'Global' RegEx matches just return an array of matches (with no indices):
+
+```
+"abcdefabcdef".match(/bcd/g) = [
+  "bcd",
+  "bcd"
+ ]
+```
  */
 JsVar *jswrap_string_match(JsVar *parent, JsVar *subStr) {
   if (!jsvIsString(parent)) return 0;
@@ -266,7 +290,7 @@ JsVar *jswrap_string_match(JsVar *parent, JsVar *subStr) {
       return array;
   }
   jsvUnLock(subStr);
-  return NULL;
+  return jsvNewNull();
 }
 
 /*JSON{
@@ -466,11 +490,13 @@ JsVar *jswrap_string_slice(JsVar *parent, JsVarInt pStart, JsVar *vEnd) {
   "name" : "split",
   "generate" : "jswrap_string_split",
   "params" : [
-    ["separator","JsVar","The start character index"]
+    ["separator","JsVar","The separator `String` or `RegExp` to use"]
   ],
   "return" : ["JsVar","Part of this string from start for len characters"]
 }
-Return an array made by splitting this string up by the separator. eg. ```'1,2,3'.split(',')==[1,2,3]```
+Return an array made by splitting this string up by the separator. eg. ```'1,2,3'.split(',')==['1', '2', '3']```
+
+Regular Expressions can also be used to split strings, eg. `'1a2b3 4'.split(/[^0-9]/)==['1', '2', '3', '4']`.
  */
 JsVar *jswrap_string_split(JsVar *parent, JsVar *split) {
   if (!jsvIsString(parent)) return 0;
@@ -486,7 +512,7 @@ JsVar *jswrap_string_split(JsVar *parent, JsVar *split) {
 #ifndef SAVE_ON_FLASH
   // Use RegExp if one is passed in
   if (jsvIsInstanceOf(split, "RegExp")) {
-    int last = 0;
+    unsigned int last = 0;
     JsVar *match;
     jsvObjectSetChildAndUnLock(split, "lastIndex", jsvNewFromInteger(0));
     match = jswrap_regexp_exec(split, parent);
@@ -506,6 +532,9 @@ JsVar *jswrap_string_split(JsVar *parent, JsVar *split) {
     }
     jsvUnLock(match);
     jsvObjectSetChildAndUnLock(split, "lastIndex", jsvNewFromInteger(0));
+    // add remaining string after last match
+    if (last<=jsvGetStringLength(parent))
+      jsvArrayPushAndUnLock(array, jsvNewFromStringVar(parent, (size_t)last, JSVAPPENDSTRINGVAR_MAXLENGTH));
     return array;
   }
 #endif

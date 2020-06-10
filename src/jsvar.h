@@ -66,8 +66,13 @@ typedef enum {
     JSV_STRING_MAX  = JSV_STRING_0+JSVAR_DATA_STRING_LEN,
     JSV_FLAT_STRING = JSV_STRING_MAX+1, ///< Flat strings store the length (in chars) as an int, and then the subsequent JsVars (in memory) store data
     JSV_NATIVE_STRING = JSV_FLAT_STRING+1, ///< Native strings store an address and length, and reference the underlying data directly
-  _JSV_STRING_END = JSV_NATIVE_STRING,
-    JSV_STRING_EXT_0 = JSV_NATIVE_STRING+1, ///< extra character data for string (if it didn't fit in first JsVar). These use unused pointer fields for extra characters
+#ifdef SPIFLASH_BASE
+    JSV_FLASH_STRING = JSV_NATIVE_STRING+1, ///< Like a native String, but not writable and uses jshFlashRead
+    _JSV_STRING_END = JSV_FLASH_STRING,
+#else
+    _JSV_STRING_END = JSV_NATIVE_STRING,
+#endif
+    JSV_STRING_EXT_0 = _JSV_STRING_END+1, ///< extra character data for string (if it didn't fit in first JsVar). These use unused pointer fields for extra characters
     JSV_STRING_EXT_MAX = JSV_STRING_EXT_0+JSVAR_DATA_STRING_MAX_LEN,
     _JSV_VAR_END     = JSV_STRING_EXT_MAX, ///< End of variable types
     // _JSV_VAR_END is:
@@ -332,6 +337,9 @@ JsVar *jsvNewEmptyArray(); ///< Create a new array
 JsVar *jsvNewArray(JsVar **elements, int elementCount); ///< Create an array containing the given elements
 JsVar *jsvNewNativeFunction(void (*ptr)(void), unsigned short argTypes); ///< Create an array containing the given elements
 JsVar *jsvNewNativeString(char *ptr, size_t len); ///< Create a Native String pointing to the given memory area
+#ifdef SPIFLASH_BASE
+JsVar *jsvNewFlashString(char *ptr, size_t len); ///< Create a Flash String pointing to the given memory area
+#endif
 JsVar *jsvNewArrayBufferFromString(JsVar *str, unsigned int lengthOrZero); ///< Create a new ArrayBuffer backed by the given string. If length is not specified, it will be worked out
 
 /// Turns var into a Variable name that links to the given value... No locking so no need to unlock var
@@ -397,6 +405,7 @@ extern bool jsvIsBasicString(const JsVar *v); ///< Just a string (NOT a name)
 extern bool jsvIsStringExt(const JsVar *v); ///< The extra bits dumped onto the end of a string to store more data
 extern bool jsvIsFlatString(const JsVar *v);
 extern bool jsvIsNativeString(const JsVar *v);
+extern bool jsvIsFlashString(const JsVar *v);
 extern bool jsvIsNumeric(const JsVar *v);
 extern bool jsvIsFunction(const JsVar *v);
 extern bool jsvIsFunctionReturn(const JsVar *v); ///< Is this a function with an implicit 'return' at the start?
@@ -686,6 +695,7 @@ JsVarInt jsvGetLength(const JsVar *src); ///< General purpose length function. D
 size_t jsvCountJsVarsUsed(JsVar *v); ///< Count the amount of JsVars used. Mostly useful for debugging
 JsVar *jsvGetArrayIndex(const JsVar *arr, JsVarInt index); ///< Get a 'name' at the specified index in the array if it exists (and lock it)
 JsVar *jsvGetArrayItem(const JsVar *arr, JsVarInt index); ///< Get an item at the specified index in the array if it exists (and lock it)
+JsVar *jsvGetLastArrayItem(const JsVar *arr); ///< Returns the last item in the given array (with string OR numeric index)
 void jsvSetArrayItem(JsVar *arr, JsVarInt index, JsVar *item); ///< Set an array item at the specified index in the array
 void jsvGetArrayItems(JsVar *arr, unsigned int itemCount, JsVar **itemPtr); ///< Get all elements from arr and put them in itemPtr (unless it'd overflow). Makes sure all of itemPtr either contains a JsVar or 0
 JsVar *jsvGetIndexOfFull(JsVar *arr, JsVar *value, bool matchExact, bool matchIntegerIndices, int startIdx); ///< Get the index of the value in the array (matchExact==use pointer not equality check, matchIntegerIndices = don't check non-integers)
@@ -709,12 +719,13 @@ void jsvTrace(JsVar *var, int indent);
 /** Run a garbage collection sweep - return nonzero if things have been freed */
 int jsvGarbageCollect();
 
-#ifndef RELEASE
+/** Defragement memory - this could take a while with interrupts turned off! */
+void jsvDefragment();
+
 // Dump any locked variables that aren't referenced from `global` - for debugging memory leaks
 void jsvDumpLockedVars();
 // Dump the free list - in order
 void jsvDumpFreeList();
-#endif
 
 /** Remove whitespace to the right of a string - on MULTIPLE LINES */
 JsVar *jsvStringTrimRight(JsVar *srcString);
@@ -759,7 +770,7 @@ JsVar *jsvNewDataViewWithData(JsVarInt length, unsigned char *data);
  * allocate it. */
 JsVar *jsvNewArrayBufferWithPtr(unsigned int length, char **ptr);
 
-/** create an arraybuffer containing the given data */
+/** create an arraybuffer containing the given data - this allocates new memory and copies 'data' */
 JsVar *jsvNewArrayBufferWithData(JsVarInt length, unsigned char *data);
 
 /** Allocate a flat area of memory inside Espruino's Variable storage space.

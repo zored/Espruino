@@ -164,6 +164,9 @@ void jshInit() {
   jshPinDefaultPullup();
 } // End of jshInit
 
+void jshKill() {
+}
+
 /**
  * Reset the Espruino environment.
  */
@@ -609,7 +612,7 @@ void jshSetSystemTime(JsSysTime newTime) {
   struct timezone tz;
   
   tm.tv_sec=(time_t)(newTime/1000000L);
-  tm.tv_usec=0;
+  tm.tv_usec=(suseconds_t) (newTime - tm.tv_sec * 1000000L);
   tz.tz_minuteswest=0;
   tz.tz_dsttime=0;
   settimeofday(&tm, &tz);
@@ -732,9 +735,9 @@ JsVar *jshFlashGetFree() {
   if (!jsFreeFlash) return 0;
   // Space reserved here in the parition table -  using sub type 0x40
   // This should be read from the partition table
-  addFlashArea(jsFreeFlash, 0xE000,  0x2000);
-  addFlashArea(jsFreeFlash, 0x2B0000, 0x10000);
-
+  addFlashArea(jsFreeFlash, 0xE000, 0x2000);
+  addFlashArea(jsFreeFlash, 0x310000, 0x10000);
+  addFlashArea(jsFreeFlash, 0x360000, 0xA0000);
   return jsFreeFlash;
 }
 

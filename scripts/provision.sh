@@ -22,29 +22,66 @@
 if [ $# -eq 0 ]
 then
   echo "USAGE:"
-  echo "source scripts/provision.sh {BOARD}"
+  echo "  source scripts/provision.sh {BOARD}"
+  echo "  source scripts/provision.sh ALL"
   return 1
 fi
 
 # set the current board
 BOARDNAME=$1
-FAMILY=`scripts/get_board_info.py $BOARDNAME 'board.chip["family"]'`
 
-if [ "$FAMILY" = "ESP32" ]; then
-    echo ESP32
+if [ "$BOARDNAME" = "ALL" ]; then
+  echo "Installing dev tools for all boards"
+  PROVISION_ESP32=1
+  PROVISION_ESP8266=1
+  PROVISION_LINUX=1
+  PROVISION_NRF52=1
+  PROVISION_NRF51=1
+  PROVISION_NRF_SDK15=1
+  PROVISION_STM32F1=1
+  PROVISION_STM32F4=1
+  PROVISION_STM32L4=1 
+  PROVISION_RASPBERRYPI=1 
+else
+  FAMILY=`scripts/get_board_info.py $BOARDNAME 'board.chip["family"]'`
+  if [ "$FAMILY" = "" ]; then
+    echo "UNKNOWN BOARD ($BOARDNAME)"
+    return 1
+  fi  
+  export PROVISION_$FAMILY=1
+  export PROVISION_$BOARDNAME=1
+  if python scripts/get_makefile_decls.py $BOARDNAME | grep NRF_SDK15; then
+    PROVISION_NRF_SDK15=1
+  fi
+fi
+echo Provision BOARDNAME = $BOARDNAME
+echo Provision FAMILY = $FAMILY
+
+if [ "$PROVISION_ESP32" = "1" ]; then
+    echo ===== ESP32
     # needed for esptool for merging binaries
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y python python-pip
-    sudo pip -q install pyserial
+    if pip --version 2>/dev/null; then 
+      echo python/pip installed
+    else
+      echo Installing python/pip pyserial
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y python python-pip
+    fi
+    if pip list 2>/dev/null | grep pyserial >/dev/null; then 
+      echo pyserial installed; 
+    else 
+      echo Installing pyserial
+      sudo pip -q install pyserial
+    fi    
     # SDK
     if [ ! -d "app" ]; then
         echo installing app folder
         curl -Ls https://github.com/espruino/EspruinoBuildTools/raw/master/esp32/deploy/app.tgz | tar xfz - --no-same-owner
-        #curl -Ls https://github.com/espruino/EspruinoBuildTools/raw/ESP32-v3.0/esp32/deploy/app.tgz | tar xfz - --no-same-owner
+        #curl -Ls https://github.com/espruino/EspruinoBuildTools/raw/ESP32-V3.1/esp32/deploy/app.tgz | tar xfz - --no-same-owner
     fi
     if [ ! -d "esp-idf" ]; then
         echo installing esp-idf folder
         curl -Ls https://github.com/espruino/EspruinoBuildTools/raw/master/esp32/deploy/esp-idf.tgz | tar xfz - --no-same-owner
-        #curl -Ls https://github.com/espruino/EspruinoBuildTools/raw/ESP32-v3.0/esp32/deploy/esp-idf.tgz | tar xfz - --no-same-owner
+        #curl -Ls https://github.com/espruino/EspruinoBuildTools/raw/ESP32-V3.1/esp32/deploy/esp-idf.tgz | tar xfz - --no-same-owner
     fi
     if ! type xtensa-esp32-elf-gcc 2> /dev/null > /dev/null; then
         echo installing xtensa-esp32-elf-gcc
@@ -54,13 +91,14 @@ if [ "$FAMILY" = "ESP32" ]; then
            echo "Folder found"
         fi
     fi
-    which xtensa-esp32-elf-gcc
     export ESP_IDF_PATH=`pwd`/esp-idf
     export ESP_APP_TEMPLATE_PATH=`pwd`/app
     export PATH=$PATH:`pwd`/xtensa-esp32-elf/bin/
-    return 0
-elif [ "$FAMILY" = "ESP8266" ]; then
-    echo ESP8266
+    echo GCC is $(which xtensa-esp32-elf-gcc)
+fi
+#--------------------------------------------------------------------------------
+if [ "$PROVISION_ESP8266" = "1" ]; then
+    echo ===== ESP8266
     if [ ! -d "ESP8266_NONOS_SDK-2.2.1" ]; then
         echo ESP8266_NONOS_SDK-2.2.1
         curl -Ls https://github.com/espruino/EspruinoBuildTools/raw/master/esp8266/ESP8266_NONOS_SDK-2.2.1.tar.gz | tar xfz - --no-same-owner
@@ -74,56 +112,105 @@ elif [ "$FAMILY" = "ESP8266" ]; then
         fi
 
     fi
-    which xtensa-lx106-elf-gcc
     export ESP8266_SDK_ROOT=`pwd`/ESP8266_NONOS_SDK-2.2.1
     export PATH=$PATH:`pwd`/xtensa-lx106-elf/bin/
-    return 0
-elif [ "$FAMILY" = "LINUX" ]; then
-    echo LINUX
-    # Raspberry Pi?
-    return 0
-elif [ "$FAMILY" = "NRF52" ]; then
-    echo NRF52
+    echo GCC is $(which xtensa-lx106-elf-gcc)
+fi
+#--------------------------------------------------------------------------------
+if [ "$PROVISION_LINUX" = "1" ]; then
+    echo ===== LINUX
+fi
+#--------------------------------------------------------------------------------
+if [ "$PROVISION_RASPBERRYPI" = "1" ]; then
+    echo ===== RASPBERRYPI
+    if [ ! -d "targetlibs/raspberrypi" ]; then
+        echo Installing Raspberry pi tools
+        mkdir targetlibs/raspberrypi        
+        cd targetlibs/raspberrypi
+        git clone --depth=1 https://github.com/raspberrypi/tools
+        # wiringpi?
+        cd ../..
+    fi    
+fi
+#--------------------------------------------------------------------------------
+if [ "$PROVISION_NRF52" = "1" ]; then
+    echo ===== NRF52
+    if ! type pip 2> /dev/null > /dev/null; then
+      echo Installing python and pip
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y python python-pip
+    fi
     if ! type nrfutil 2> /dev/null > /dev/null; then
       echo Installing nrfutil
-      sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y python python-pip
-      sudo pip -q install nrfutil
+      sudo pip install --ignore-installed nrfutil
+      # --ignore-installed is used because pip 10 fails because PyYAML was already installed by the system
+      # -q can be used to silence the above
     fi
     ARM=1
-elif [ "$FAMILY" = "NRF51" ]; then
-    ARM=1
-elif [ "$FAMILY" = "STM32F1" ]; then
-    ARM=1
-elif [ "$FAMILY" = "STM32F3" ]; then
-    ARM=1
-elif [ "$FAMILY" = "STM32F4" ]; then
-    ARM=1
-elif [ "$FAMILY" = "STM32L4" ]; then
-    ARM=1
-elif [ "$FAMILY" = "EFM32GG" ]; then
-    ARM=1
-elif [ "$FAMILY" = "SAMD" ]; then
-    ARM=1
-else
-    echo "Unknown board ($BOARDNAME) or family ($FAMILY)"
-    return 1
-fi
 
-if [ $ARM = "1" ]; then
+fi
+#--------------------------------------------------------------------------------
+if [ "$PROVISION_NRF51" = "1" ]; then
+    ARM=1
+fi
+if [ "$PROVISION_NRF_SDK15" = "1" ]; then
+    if [ ! -d "targetlibs/nrf5x_15/components" ]; then
+        echo Installing NRF SDK 15.0 to targetlibs/nrf5x_15/components
+        curl https://developer.nordicsemi.com/nRF5_SDK/nRF5_SDK_v15.x.x/nRF5_SDK_15.0.0_a53641a.zip -o nRF5_SDK_15.0.0_a53641a.zip
+        unzip -o nRF5_SDK_15.0.0_a53641a.zip
+        mv nRF5_SDK_15.0.0_a53641a/* targetlibs/nrf5x_15
+        rm -rf nRF5_SDK_15.0.0_a53641a.zip nRF5_SDK_15.0.0_a53641a
+        dos2unix targetlibs/nrf5x_15/components/nfc/t2t_lib/hal_t2t/hal_nfc_t2t.h
+        dos2unix targetlibs/nrf5x_15/components/nfc/t2t_lib/hal_t2t/hal_nfc_t2t.c
+        dos2unix targetlibs/nrf5x_15/modules/nrfx/mdk/nrf.h
+        echo ======================================================
+        echo "FIXME - SDK15 NFC patches don't apply cleanly"
+        echo ======================================================
+        cat targetlibs/nrf5x_15/patches/* | patch -p1
+    fi
+fi
+#--------------------------------------------------------------------------------
+if [ "$PROVISION_STM32F1" = "1" ]; then
+    ARM=1
+fi
+#--------------------------------------------------------------------------------
+if [ "$PROVISION_STM32F3" = "1" ]; then
+    ARM=1
+fi
+#--------------------------------------------------------------------------------
+if [ "$PROVISION_STM32F4" = "1" ]; then
+    ARM=1
+fi
+#--------------------------------------------------------------------------------
+if [ "$PROVISION_STM32L4" = "1" ]; then
+    ARM=1
+fi
+#--------------------------------------------------------------------------------
+if [ "$PROVISION_EFM32GG" = "1" ]; then
+    ARM=1
+fi
+#--------------------------------------------------------------------------------
+if [ "$PROVISION_SAMD" = "1" ]; then
+    ARM=1
+fi
+#--------------------------------------------------------------------------------
+
+
+if [ "$ARM" = "1" ]; then
     # defaulting to ARM
-    echo ARM
-    if ! type arm-none-eabi-gcc 2> /dev/null > /dev/null; then
+    echo ===== ARM
+    if type arm-none-eabi-gcc 2> /dev/null > /dev/null; then
+        echo arm-none-eabi-gcc installed
+    else
         echo installing gcc-arm-embedded
         #sudo add-apt-repository -y ppa:team-gcc-arm-embedded/ppa
         #sudo apt-get update
         #sudo DEBIAN_FRONTEND=noninteractive apt-get --force-yes --yes install libsdl1.2-dev gcc-arm-embedded
         # Unpack - newer, and much faster
-        if [ ! -d "gcc-arm-none-eabi-6-2017-q1-update" ]; then
-          curl -Ls https://github.com/espruino/EspruinoBuildTools/raw/master/arm/gcc-arm-none-eabi-6-2017-q1-update-linux.tar.bz2 | tar xfj - --no-same-owner
+        if [ ! -d "gcc-arm-none-eabi-8-2018-q4-major" ]; then
+          curl -Ls https://github.com/espruino/EspruinoBuildTools/raw/master/arm/gcc-arm-none-eabi-8-2018-q4-major-linux.tar.bz2 | tar xfj - --no-same-owner
         else
             echo "Folder found"
         fi
-	export PATH=$PATH:`pwd`/gcc-arm-none-eabi-6-2017-q1-update/bin
+	export PATH=$PATH:`pwd`/gcc-arm-none-eabi-8-2018-q4-major/bin
     fi
-    return 0
 fi

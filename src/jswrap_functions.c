@@ -47,14 +47,15 @@ Normal JavaScript interpreters would return `0` in the above case.
 extern JsExecInfo execInfo;
 JsVar *jswrap_arguments() {
   JsVar *scope = 0;
-  if (execInfo.scopeCount>0)
-    scope = execInfo.scopes[execInfo.scopeCount-1];
+  if (execInfo.scopesVar)
+    scope = jsvGetLastArrayItem(execInfo.scopesVar);
   if (!jsvIsFunction(scope)) {
     jsExceptionHere(JSET_ERROR, "Can only use 'arguments' variable inside a function");
     return 0;
   }
-
-  return jsvGetFunctionArgumentLength(scope);
+  JsVar *result = jsvGetFunctionArgumentLength(scope);
+  jsvUnLock(scope);
+  return result;
 }
 
 
@@ -136,7 +137,7 @@ JsVar *jswrap_eval(JsVar *v) {
 Convert a string representing a number into an integer
  */
 JsVar *jswrap_parseInt(JsVar *v, JsVar *radixVar) {
-  int radix = 0/*don't force radix*/;
+  int radix = 0;
   if (jsvIsNumeric(radixVar))
     radix = (int)jsvGetInteger(radixVar);
 
@@ -145,12 +146,19 @@ JsVar *jswrap_parseInt(JsVar *v, JsVar *radixVar) {
 
   // otherwise convert to string
   char buffer[JS_NUMBER_BUFFER_SIZE];
+  char *bufferStart = buffer;
   jsvGetString(v, buffer, JS_NUMBER_BUFFER_SIZE);
   bool hasError = false;
-  if (!radix && buffer[0]=='0' && isNumeric(buffer[1]))
-    radix = 10; // DON'T assume a number is octal if it starts with 0
+  if (((!radix) || (radix==16)) &&
+      buffer[0]=='0' && (buffer[1]=='x' || buffer[1]=='X')) { // special-case for '0x' for parseInt
+    radix = 16;
+    bufferStart += 2;
+  }
+  if (!radix) {
+    radix = 10; // default to radix 10
+  }
   const char *endOfInteger;
-  long long i = stringToIntWithRadix(buffer, radix, &hasError, &endOfInteger);
+  long long i = stringToIntWithRadix(bufferStart, radix, &hasError, &endOfInteger);
   if (hasError) return jsvNewFromFloat(NAN);
   // If the integer went right to the end of our buffer then we
   // probably had to miss some stuff off the end of the string
@@ -455,14 +463,15 @@ JsVar *jswrap_decodeURIComponent(JsVar *arg) {
         jsvStringIteratorAppend(&dst, ch);
       } else {
         jsvStringIteratorNext(&it);
-        int hi = chtod(jsvStringIteratorGetChar(&it));
+        int hi = jsvStringIteratorGetChar(&it);
         jsvStringIteratorNext(&it);
-        int lo = chtod(jsvStringIteratorGetChar(&it));
-        ch = (char)((hi<<4)|lo);
-        if (hi<0 || lo<0 || ch>>7) {
+        int lo = jsvStringIteratorGetChar(&it);
+        int v = (char)hexToByte(hi,lo);
+        if (v<0) {
           jsExceptionHere(JSET_ERROR, "Invalid URI\n");
           break;
         }
+        ch = (char)v;
         jsvStringIteratorAppend(&dst, ch);
       }
       jsvStringIteratorNext(&it);

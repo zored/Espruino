@@ -25,11 +25,13 @@
 #include "DHCP/dhcp.h"
 
 // -------------------- defaults...
+#ifdef STM32
 #define ETH_SPI          EV_SPI3
 #define ETH_CS_PIN       (Pin)(JSH_PORTB_OFFSET + 2) // active low
 #define ETH_CLK_PIN      (Pin)(JSH_PORTB_OFFSET + 3)
 #define ETH_MISO_PIN     (Pin)(JSH_PORTB_OFFSET + 4)
 #define ETH_MOSI_PIN     (Pin)(JSH_PORTB_OFFSET + 5)
+#endif
 // -------------------------------
 
 void  wizchip_select(void) {
@@ -60,13 +62,15 @@ uint8_t wizchip_read() {
 
 /*JSON{
   "type" : "library",
-  "class" : "WIZnet"
+  "class" : "WIZnet",
+  "ifdef" : "USE_WIZNET"
 }
 Library for communication with the WIZnet Ethernet module
 */
 /*JSON{
   "type" : "staticmethod",
   "class" : "WIZnet",
+  "ifdef" : "USE_WIZNET",
   "name" : "connect",
   "generate" : "jswrap_wiznet_connect",
   "params" : [
@@ -88,6 +92,7 @@ JsVar *jswrap_wiznet_connect(JsVar *spi, Pin cs) {
       return 0;
     }
   } else {
+#ifdef ETH_SPI
     // SPI config
     JshSPIInfo inf;
     jshSPIInitInfo(&inf);
@@ -98,9 +103,15 @@ JsVar *jswrap_wiznet_connect(JsVar *spi, Pin cs) {
     inf.spiMode = SPIF_SPI_MODE_0;
     jshSPISetup(ETH_SPI, &inf);
     spiDevice = ETH_SPI;
+#else
+    jsExceptionHere(JSET_ERROR, "No default SPI on this platform - you must specify one.");
+    return 0;
+#endif
   }
+#ifdef ETH_CS_PIN
   if (!jshIsPinValid(cs))
     cs = ETH_CS_PIN;
+#endif
 
   JsNetwork net;
   networkCreate(&net, JSNETWORKTYPE_W5500);
@@ -149,7 +160,8 @@ JsVar *jswrap_wiznet_connect(JsVar *spi, Pin cs) {
 
 /*JSON{
   "type" : "class",
-  "class" : "Ethernet"
+  "class" : "Ethernet",
+  "ifdef" : "USE_WIZNET"
 }
 An instantiation of an Ethernet network adaptor
 */
@@ -157,6 +169,7 @@ An instantiation of an Ethernet network adaptor
 /*JSON{
   "type" : "method",
   "class" : "Ethernet",
+  "ifdef" : "USE_WIZNET",
   "name" : "getIP",
   "generate" : "jswrap_ethernet_getIP",
   "params" : [
@@ -217,6 +230,7 @@ static void _eth_getIP_set_address(JsVar *options, char *name, unsigned char *pt
 /*JSON{
   "type" : "method",
   "class" : "Ethernet",
+  "ifdef" : "USE_WIZNET",
   "name" : "setIP",
   "generate" : "jswrap_ethernet_setIP",
   "params" : [

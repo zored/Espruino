@@ -22,6 +22,7 @@ info = {
  'build' : {
    'libraries' : [
      'NET',
+     'TENSORFLOW',
      'GRAPHICS',
      'FILESYSTEM',
      'CRYPTO','SHA256','SHA512',
@@ -30,6 +31,8 @@ info = {
    ],
    'makefile' : [
 #     'DEFINES+=-DFLASH_64BITS_ALIGNMENT=1', For testing 64 bit flash writes
+     'DEFINES+=-DUSE_FONT_6X8 -DGRAPHICS_PALETTED_IMAGES',
+     'DEFINES+=-DSPIFLASH_BASE=0', # For Testing Flash Strings
      'LINUX=1',
    ]
  }

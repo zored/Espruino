@@ -186,16 +186,17 @@ typedef struct {
  * Send a single byte to the SPI device, used as callback.
  */
 void jswrap_spi_send_cb(
-    int c,                     //!< The byte to send through SPI.
-    jswrap_spi_send_data *data //!< Control information on how to send to SPI.
+    unsigned char *data, unsigned int len,
+    jswrap_spi_send_data *callbackData
   ) {
-  // Invoke the SPI send function to transmit the single byte.
-  int result = data->spiSend(c, &data->spiSendData);
-  if (c>=0) data->txAmt++;
-  if (result>=0) {
-    jsvArrayBufferIteratorSetByteValue(&data->it, (char)result);
-    jsvArrayBufferIteratorNext(&data->it);
-    data->rxAmt++;
+  unsigned char *rx = alloca(len);
+  // TODO: alloc check?
+  callbackData->spiSend(data, rx, len, &callbackData->spiSendData);
+  callbackData->txAmt += len;
+  callbackData->rxAmt += len;
+  while (len--) {
+    jsvArrayBufferIteratorSetByteValue(&callbackData->it, *(rx++));
+    jsvArrayBufferIteratorNext(&callbackData->it);
   }
 }
 
@@ -234,36 +235,29 @@ JsVar *jswrap_spi_send(
 
   // Handle the data being a single byte value
   if (jsvIsNumeric(srcdata)) {
-    int d = jsvGetInteger(srcdata);
-    if (d<0) d = 0; // protect against -1 as we use this in the jshardware SPI implementation
-    int r = data.spiSend(d, &data.spiSendData);
-    if (r<0) r = data.spiSend(-1, &data.spiSendData);
-    dst = jsvNewFromInteger(r); // retrieve the byte (no send!)
+    unsigned char ch = (unsigned char)jsvGetInteger(srcdata);
+    data.spiSend(&ch, &ch, 1, &data.spiSendData);
+    dst = jsvNewFromInteger(ch);
   }
   // Handle the data being a string
   else if (jsvIsString(srcdata)) {
     dst = jsvNewFromEmptyString();
+    unsigned char outdata[128];
     JsvStringIterator it;
     jsvStringIteratorNew(&it, srcdata, 0);
-    int incount = 0, outcount = 0;
     while (jsvStringIteratorHasChar(&it) && !jspIsInterrupted()) {
-      unsigned char in = (unsigned char)jsvStringIteratorGetChar(&it);
-      incount++;
-      int out = data.spiSend(in, &data.spiSendData);
-      if (out>=0) {
-        outcount++;
-        char outc = (char)out;
-        jsvAppendStringBuf(dst, (char*)&outc, 1);
+      unsigned char *indata;
+      unsigned int len;
+      jsvStringIteratorGetPtrAndNext(&it,&indata,&len);
+      while (len) {
+        unsigned int l = (len>sizeof(outdata))?sizeof(outdata):len;
+        data.spiSend(indata, outdata, l, &data.spiSendData);
+        jsvAppendStringBuf(dst, (char*)outdata, l);
+        len-=l;
+        indata+=l;
       }
-      jsvStringIteratorNext(&it);
     }
     jsvStringIteratorFree(&it);
-    // finally add the remaining bytes  (no send!)
-    while (outcount < incount && !jspIsInterrupted()) {
-      outcount++;
-      unsigned char out = (unsigned char)data.spiSend(-1, &data.spiSendData);
-      jsvAppendStringBuf(dst, (char*)&out, 1);
-    }
   } else {
     // Handle the data being an iterable.
     int nBytes = jsvIterateCallbackCount(srcdata);
@@ -271,11 +265,7 @@ JsVar *jswrap_spi_send(
     if (dst) {
       data.rxAmt = data.txAmt = 0;
       jsvArrayBufferIteratorNew(&data.it, dst, 0);
-      // Write data
-      jsvIterateCallback(srcdata, (void (*)(int,  void *))jswrap_spi_send_cb, &data);
-      // Wait until SPI send is finished, and flush data
-      while (data.rxAmt < data.txAmt && !jspIsInterrupted())
-        jswrap_spi_send_cb(-1, &data);
+      jsvIterateBufferCallback(srcdata, (jsvIterateBufferCallbackFn)jswrap_spi_send_cb, &data);
       jsvArrayBufferIteratorFree(&data.it);
     }
   }
@@ -286,13 +276,25 @@ JsVar *jswrap_spi_send(
 }
 
 
+typedef struct {
+  spi_sender spiSend;          //!< A function to be called to send SPI data.
+  spi_sender_data spiSendData; //!< Control information on the nature of the SPI interface.
+} jswrap_spi_write_data;
+
+void jswrap_spi_write_cb(
+    unsigned char *data, unsigned int len,
+    jswrap_spi_write_data *callbackData
+  ) {
+  callbackData->spiSend(data, NULL, len, &callbackData->spiSendData);
+}
+
 /*JSON{
   "type" : "method",
   "class" : "SPI",
   "name" : "write",
   "generate" : "jswrap_spi_write",
   "params" : [
-    ["data","JsVarArray",["One or more items to write. May be ints, strings, arrays, or objects of the form `{data: ..., count:#}`.","If the last argument is a pin, it is taken to be the NSS pin"]]
+    ["data","JsVarArray",["One or more items to write. May be ints, strings, arrays, or special objects (see `E.toUint8Array` for more info).","If the last argument is a pin, it is taken to be the NSS pin"]]
   ]
 }
 Write a character or array of characters to SPI - without reading the result back.
@@ -310,6 +312,10 @@ void jswrap_spi_write(
   spi_sender_data spiSendData;
   if (!jsspiGetSendFunction(parent, &spiSend, &spiSendData))
     return;
+
+  jswrap_spi_write_data spi_write_data;
+  spi_write_data.spiSend = spiSend;
+  spi_write_data.spiSendData = spiSendData;
 
   Pin nss_pin = PIN_UNDEFINED;
   // If the last value is a pin, use it as the NSS pin
@@ -329,7 +335,7 @@ void jswrap_spi_write(
   // assert NSS
   if (nss_pin!=PIN_UNDEFINED) jshPinOutput(nss_pin, false);
   // Write data
-  jsvIterateCallback(args, (void (*)(int,  void *))spiSend, &spiSendData);
+  jsvIterateBufferCallback(args, (jsvIterateBufferCallbackFn)jswrap_spi_write_cb, &spi_write_data);
   // Wait until SPI send is finished, and flush data
   if (DEVICE_IS_SPI(device))
     jshSPIWait(device);
@@ -598,7 +604,7 @@ static NO_INLINE int i2c_get_address(JsVar *address, bool *sendStop) {
   "generate" : "jswrap_i2c_writeTo",
   "params" : [
     ["address","JsVar","The 7 bit address of the device to transmit to, or an object of the form `{address:12, stop:false}` to send this data without a STOP signal."],
-    ["data","JsVarArray","One or more items to write. May be ints, strings, arrays, or objects of the form `{data: ..., count:#}`."]
+    ["data","JsVarArray","One or more items to write. May be ints, strings, arrays, or special objects (see `E.toUint8Array` for more info)."]
   ]
 }
 Transmit to the slave device with the given address. This is like Arduino's beginTransmission, write, and endTransmission rolled up into one.

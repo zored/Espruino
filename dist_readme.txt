@@ -12,20 +12,27 @@ http://www.espruino.com
 There are a few different binaries in this ZIP file, for different
 types of Microcontroller:
 
-
-espruino_#v##_pico_1r3_cc3000.bin  
+espruino_#v##_pico_1r3.bin 
+   - AT command WiFi support (includes all features)
+espruino_#v##_pico_1r3_cc3000.bin 
+   - CC3000 WiFi networking (without debugger, AT Command WiFi, vector font)
 espruino_#v##_pico_1r3_wiznet.bin  
+   - WIZNET W5500 ethernet (without debugger, AT Command WiFi, vector font)
+ 
    - The firmware image for Espruino Pico Boards.
      We'd strongly suggest that you use the Web IDE to flash this.
      Each image is for a different type of networking device.
-     If you don't want a network device, it doesn't matter which you choose.
+     If you don't need networking, use espruino_#v##_pico_1r3.bin
 
 espruino_#v##_espruino_1r3.bin  
-espruino_#v##_espruino_1r3_wiznet.bin  
+   - AT command WiFi
+espruino_#v##_espruino_1r3_wiznet.bin   
+   - WIZNET W5500 ethernet (without crypto lib, debugger, vector font)
+
    - The firmware image for Original Espruino Boards
      We'd strongly suggest that you use the Web IDE to flash this.
      Each image is for a different type of networking device.
-     If you don't want a network device, it doesn't matter which you choose.
+     If you don't need networking, use espruino_#v##_espruino_1r3.bin
 
 espruino_#v##_wifi.bin  
    - The firmware image for Espruino WiFi Boards
@@ -45,14 +52,6 @@ espruino_#v##_mdbt42q.zip
 
 espruino_#v##_hystm32_24_ve.bin 
    - 'HY'STM32F103VET6 ARM with 2.4" LCD display
-     This is available from eBay
-
-espruino_#v##_hystm32_28_rb.bin 
-   - 'HY'STM32F103RBT6 ARM with 2.8" LCD display
-     This is available from eBay
-
-espruino_#v##_hystm32_32_vc.bin 
-   - 'HY'STM32F103VCT6 ARM with 3.2" LCD display
      This is available from eBay
 
 espruino_#v##_stm32l496gdiscovery.bin
@@ -94,14 +93,6 @@ espruino_#v##_Wio_LTE.zip
    - The firmware image for Seed Wio LTE Devices
      See http://www.espruino.com/WioLTE for more information
 
-espruino_#v##_thingy52.hex
-   - The firmware image for Nordic Thing:52 Devices
-     See http://www.espruino.com/Thingy52 for more information
-
-espruino_#v##nrf52832.hex
-   - The firmware image for Nordic Thing:52 Devices
-     See http://www.espruino.com/nRF52832DK for more information
-
 espruino_#v##stm32l496gdiscovery.bin
    - The firmware image for the STM32L496G Discovery Board
      See http://www.espruino.com/STM32L496GDISCOVERY for more information
@@ -114,6 +105,13 @@ espruino_#v##rak8212.hex
    - The firmware image for the RAK8212 iTracker
      See http://www.espruino.com/RAK8212 for more information
 
+espruino_#v##smartibot.zip
+   - The firmware image for the Smartibot robot board
+     See http://www.espruino.com/Smartibot for more information
+
+espruino_#v##_thingy52.hex
+   - The firmware image for Nordic Thing:52 Devices
+     See http://www.espruino.com/Thingy52 for more information
 
 
 ESP8266 / ESP32
