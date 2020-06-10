@@ -1,7 +1,23 @@
-# Branch info
+# Zored Espruino
 This is **WIP** merge of two branches:
 - [IskraJS 2v00](https://github.com/amperka/Espruino/tree/iskrajs_2V00)
 - [Espruino 2v05](https://github.com/espruino/Espruino/tree/RELEASE_2V05)
+
+Run this command:
+```bash
+# Enter image:
+docker run \
+  --rm -it \
+  --name zored_espruino \
+  -v $PWD/firmware:/firmware \
+  -e IMG_FILE=/firmware/
+  -v $PWD:/espruino \
+  zored/espruino:2v05 \
+    sh
+
+# Build firmware:
+./scripts/create_iskrajs_image.sh
+```
 
 Espruino JavaScript for Microcontrollers
 ========================================
