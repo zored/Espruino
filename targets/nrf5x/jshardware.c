@@ -80,7 +80,6 @@ void app_error_fault_handler(uint32_t id, uint32_t pc, uint32_t info) {
 #include "softdevice_handler.h"
 #endif
 
-
 void WDT_IRQHandler() {
 }
 

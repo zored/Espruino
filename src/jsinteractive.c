@@ -826,13 +826,6 @@ void jsiSemiInit(bool autoLoad) {
           "\e[?7l"
 #endif
           // rectangles @ http://www.network-science.de/ascii/
-
-#ifdef ISKRAJS
-          "    ____       __\n"
-          "   /  _/_____ / /__ _____ ____ _\n"
-          "   / / / ___// //_// ___// __ `/\n"
-          " _/ / (__  )/ ,<  / /   / /_/ /\n"
-          "/___//____//_/|_|/_/    \\__,_/\n"
           "\n"
           " ____                 _ \n"
           "|  __|___ ___ ___ _ _|_|___ ___ \n"
@@ -847,7 +840,6 @@ void jsiSemiInit(bool autoLoad) {
           "Espruino is Open Source. Our work is supported\n"
           "only by sales of official boards and donations:\n"
           "http://espruino.com/Donate\n"
-#endif
 #endif
         );
 #ifdef ESP8266

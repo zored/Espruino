@@ -303,10 +303,11 @@ i2c_master_writeByte(uint8 wrdata)
     for (i = 7; i >= 0; i--) {
         dat = wrdata >> i;
         i2c_master_setDC(dat, 0);
+        i2c_master_wait(1);
         i2c_master_setDC(dat, 1);
         i2c_master_wait(1);
         while (!i2c_master_getDD()) {}; // PB
         i2c_master_setDC(dat, 0);
-        i2c_master_wait(1);
+        i2c_master_wait(2);
     }
 }

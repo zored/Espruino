@@ -1563,8 +1563,6 @@ static void fds_evt_handler(fds_evt_t const * const p_evt)
         //NRF_LOG_DEBUG("GC completed\n");
     }
 }
-#endif
-
 
 
 /// Function for handling Peer Manager events.
